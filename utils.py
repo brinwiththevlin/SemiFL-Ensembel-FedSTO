@@ -1,0 +1,125 @@
+import torch
+from config import cfg
+import torch.optim as optim
+import numpy as np
+from typing import Dict, List, Union
+from torch.utils.data import Dataset
+
+
+def to_device(input, device):
+    output = recur(lambda x, y: x.to(y), input, device)
+    return output
+
+
+def collate(input):
+    for k in input:
+        input[k] = torch.stack(input[k], 0)
+    return input
+
+
+def make_optimizer(parameters, tag):
+    assert cfg[tag]["optimizer_name"] == "SGD"
+    optimizer = optim.SGD(
+        parameters,
+        lr=cfg[tag]["lr"],
+        momentum=cfg[tag]["momentum"],
+        weight_decay=cfg[tag]["weight_decay"],
+        nesterov=cfg[tag]["nesterov"],
+    )
+    return optimizer
+
+
+def process_dataset(dataset: Dict[str, Dataset]) -> None:
+    """add data size and target size to cfg
+
+    Args:
+        dataset (Dict[str,Dataset]): dictionary of dataset. keys: "train", "test"
+    """
+    cfg["data_size"] = {"train": len(dataset["train"]), "test": len(dataset["test"])}
+    cfg["target_size"] = dataset["train"].target_size
+    return
+
+
+def recur(fn, input, *args):
+    if isinstance(input, torch.Tensor) or isinstance(input, np.ndarray):
+        output = fn(input, *args)
+    elif isinstance(input, list):
+        output = []
+        for i in range(len(input)):
+            output.append(recur(fn, input[i], *args))
+    elif isinstance(input, tuple):
+        output = []
+        for i in range(len(input)):
+            output.append(recur(fn, input[i], *args))
+        output = tuple(output)
+    elif isinstance(input, dict):
+        output = {}
+        for key in input:
+            output[key] = recur(fn, input[key], *args)
+    elif isinstance(input, str):
+        output = input
+    elif input is None:
+        output = None
+    else:
+        raise ValueError("Not valid input type")
+    return output
+
+
+def process_control():
+    assert "num_clients" in cfg["control"], "Not valid control"
+
+    cfg["num_supervised"] = int(cfg["control"]["num_supervised"])
+    data_shape = {
+        # "MNIST": [1, 28, 28],
+        # "FashionMNIST": [1, 28, 28],
+        # "CIFAR10": [3, 32, 32],
+        # "CIFAR100": [3, 32, 32],
+        # "SVHN": [3, 32, 32],
+    }
+    cfg["data_shape"] = data_shape[cfg["data_name"]]
+    cfg["conv"] = {"hidden_size": [32, 64]}
+    # cfg["resnet9"] = {"hidden_size": [64, 128, 256, 512]}
+    # cfg["resnet18"] = {"hidden_size": [64, 128, 256, 512]}
+    # cfg["wresnet28x2"] = {"depth": 28, "widen_factor": 2, "drop_rate": 0.0}
+    # cfg["wresnet28x8"] = {"depth": 28, "widen_factor": 8, "drop_rate": 0.0}
+    cfg["unsup_ratio"] = 1
+    if "loss_mode" in cfg["control"]:
+        cfg["loss_mode"] = cfg["control"]["loss_mode"]
+        cfg["threshold"] = float(cfg["control"]["loss_mode"].split("-")[0].split("@")[1])
+
+    cfg["num_clients"] = int(cfg["control"]["num_clients"])
+    cfg["active_rate"] = float(cfg["control"]["active_rate"])
+    cfg["data_split_mode"] = cfg["control"]["data_split_mode"]
+    cfg["local_epoch"] = cfg["control"]["local_epoch"].split("-")
+    cfg["gm"] = float(cfg["control"]["gm"])
+    cfg["sbn"] = int(cfg["control"]["sbn"])
+    cfg["ft"] = int(cfg["control"]["ft"])
+    cfg["server"] = {}
+    cfg["server"]["shuffle"] = {"train": True, "test": False}
+    if cfg["num_supervised"] > 1000:
+        cfg["server"]["batch_size"] = {"train": 250, "test": 500}
+    else:
+        cfg["server"]["batch_size"] = {"train": 10, "test": 500}
+    cfg["server"]["num_epochs"] = int(np.ceil(float(cfg["local_epoch"][1])))
+    cfg["client"] = {}
+    cfg["client"]["shuffle"] = {"train": True, "test": False}
+    cfg["client"]["batch_size"] = {"train": 10, "test": 250}
+    cfg["client"]["num_epochs"] = int(np.ceil(float(cfg["local_epoch"][0])))
+    cfg["local"] = {}
+    cfg["local"]["optimizer_name"] = "SGD"
+    cfg["local"]["lr"] = 3e-2
+    cfg["local"]["momentum"] = 0.9
+    cfg["local"]["weight_decay"] = 5e-4
+    cfg["local"]["nesterov"] = True
+    cfg["global"] = {}
+    cfg["global"]["batch_size"] = {"train": 250, "test": 250}
+    cfg["global"]["shuffle"] = {"train": True, "test": False}
+    cfg["global"]["num_epochs"] = 800
+    cfg["global"]["optimizer_name"] = "SGD"
+    cfg["global"]["lr"] = 1
+    cfg["global"]["momentum"] = cfg["gm"]
+    cfg["global"]["weight_decay"] = 0
+    cfg["global"]["nesterov"] = False
+    cfg["global"]["scheduler_name"] = "CosineAnnealingLR"
+    cfg["alpha"] = 0.75
+    return
