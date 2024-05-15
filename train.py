@@ -21,6 +21,8 @@ from metrics import Metric
 from modules import Server, Client
 from utils import save, to_device, process_control, process_dataset, make_optimizer, make_scheduler, resume, collate
 from logger import make_logger
+from typing import Dict, List, Union
+import torch.nn as nn
 
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description="cfg")
@@ -56,7 +58,7 @@ def runExperiment():
     )
     data_loader = make_data_loader(server_dataset, "global")
 
-    model = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
+    model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
     optimizer = make_optimizer(model.parameters(), "local")
     scheduler = make_scheduler(optimizer, "global")
 
@@ -65,6 +67,7 @@ def runExperiment():
 
     data_split = split_dataset(client_dataset, cfg["num_clients"], cfg["data_split_mode"])
 
+    # TODO: change this based on final loss mode
     metric = Metric(
         {"train": ["Loss", "Accuracy", "PAccuracy", "MAccuracy", "LabelRatio"], "test": ["Loss", "Accuracy"]}
     )

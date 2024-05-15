@@ -2,7 +2,7 @@ import torch
 from config import cfg
 import torch.optim as optim
 import numpy as np
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Generator
 from torch.utils.data import Dataset
 
 
@@ -17,8 +17,18 @@ def collate(input):
     return input
 
 
-def make_optimizer(parameters, tag):
-    assert cfg[tag]["optimizer_name"] == "SGD"
+def make_optimizer(parameters: Generator, tag: str) -> optim.Optimizer:
+    """set optimizer
+
+    Args:
+        parameters (Generator): model parameter generator
+        tag (str): local or global
+
+    Returns:
+        optim.Optimizer: model optimizer
+    """
+    assert tag in ["local", "global"], "Not valid tag"
+    assert cfg[tag]["optimizer_name"] == "SGD", "Not valid optimizer"
     optimizer = optim.SGD(
         parameters,
         lr=cfg[tag]["lr"],
@@ -27,6 +37,22 @@ def make_optimizer(parameters, tag):
         nesterov=cfg[tag]["nesterov"],
     )
     return optimizer
+
+
+def make_scheduler(optimizer: optim.Optimizer, tag: str) -> optim.lr_scheduler._LRScheduler:
+    """set scheduler
+
+    Args:
+        optimizer (optim.Optimizer): model optimizer
+        tag (str): local or global
+
+    Returns:
+        optim.lr_scheduler._LRScheduler: model scheduler
+    """
+    assert tag in ["local", "global"], "Not valid tag"
+    assert cfg[tag]["scheduler_name"] == "CosineAnnealingLR", "Not valid scheduler"
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg[tag]["num_epochs"], eta_min=0)
+    return scheduler
 
 
 def process_dataset(dataset: Dict[str, Dataset]) -> None:

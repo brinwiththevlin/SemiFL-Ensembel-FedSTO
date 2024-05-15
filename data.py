@@ -1,5 +1,5 @@
 import copy
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import torch
 import numpy as np
 import models
@@ -140,6 +140,23 @@ def separate_dataset_su(
     return _server_dataset, _client_dataset, supervised_idx
 
 
+def make_batchnorm_dataset_su(server_dataset: Dataset, client_dataset: Dataset) -> Dataset:
+    """make batchnorm dataset for supervised training
+
+    Args:
+        server_dataset (Dataset): server dataset
+        client_dataset (Dataset): client dataset
+
+    Returns:
+        Dataset: batchnorm dataset
+    """
+    batchnorm_dataset = copy.deepcopy(server_dataset)
+    batchnorm_dataset.data = batchnorm_dataset.data + client_dataset.data
+    batchnorm_dataset.target = batchnorm_dataset.target + client_dataset.target
+    batchnorm_dataset.other["id"] = batchnorm_dataset.other["id"] + client_dataset.other["id"]
+    return batchnorm_dataset
+
+
 def input_collate(batch):
     if isinstance(batch[0], dict):
         output = {key: [] for key in batch[0].keys()}
@@ -189,6 +206,95 @@ def make_data_loader(
             )
 
     return data_loader
+
+
+def split_dataset(dataset, num_users, data_split_mode):
+    assert cfg["data_split_mode"] == "iid" or "non-iid" in cfg["data_split_mode"], "Not valid data split mode"
+    data_split = {}
+    if data_split_mode == "iid":
+        data_split["train"] = iid(dataset["train"], num_users)
+        data_split["test"] = iid(dataset["test"], num_users)
+    elif "non-iid" in cfg["data_split_mode"]:
+        data_split["train"] = non_iid(dataset["train"], num_users)
+        data_split["test"] = non_iid(dataset["test"], num_users)
+    return data_split
+
+
+def iid(dataset: Dataset, num_users: int) -> Dict[int, List[int]]:
+    """splits dataset into num_users iid parts
+
+    Args:
+        dataset (Dataset): dataset to be split
+        num_users (int): number of users
+
+    Returns:
+        Dict[int, List[int]]: dictionary of data split. keys: user index, values: list of data index
+    """
+    num_items = int(len(dataset) / num_users)
+    data_split, idx = {}, list(range(len(dataset)))
+    for i in range(num_users):
+        num_items_i = min(len(idx), num_items)
+        data_split[i] = torch.tensor(idx)[torch.randperm(len(idx))[:num_items_i]].tolist()
+        idx = list(set(idx) - set(data_split[i]))
+    return data_split
+
+
+def non_iid(dataset: Dataset, num_users: int) -> Dict[int, List[int]]:
+    """splits dataset into num_users non-iid parts
+
+    Args:
+        dataset (Dataset): dataset to split
+        num_users (int): number of users
+
+    Returns:
+        Dict[int, List[int]]: dictionary of data split. keys: user index, values: list of data index
+    """
+    target = torch.tensor(dataset.target)
+    data_split_mode_list = cfg["data_split_mode"].split("-")
+    data_split_mode_tag = data_split_mode_list[-2]
+    assert data_split_mode_tag in ["l", "d"], "Not valid data split mode tag"
+    if data_split_mode_tag == "l":  # balanced non-iid with at most l classes per user
+        data_split = {i: [] for i in range(num_users)}
+        shard_per_user = int(data_split_mode_list[-1])
+        target_idx_split = {}
+        shard_per_class = int(shard_per_user * num_users / cfg["target_size"])
+        for target_i in range(cfg["target_size"]):
+            target_idx = torch.where(target == target_i)[0]
+            num_leftover = len(target_idx) % shard_per_class
+            leftover = target_idx[-num_leftover:] if num_leftover > 0 else []
+            new_target_idx = target_idx[:-num_leftover] if num_leftover > 0 else target_idx
+            new_target_idx = new_target_idx.reshape((shard_per_class, -1)).tolist()
+            for i, leftover_target_idx in enumerate(leftover):
+                new_target_idx[i] = new_target_idx[i] + [leftover_target_idx.item()]
+            target_idx_split[target_i] = new_target_idx
+        target_split = list(range(cfg["target_size"])) * shard_per_class
+        target_split = torch.tensor(target_split)[torch.randperm(len(target_split))].tolist()
+        target_split = torch.tensor(target_split).reshape((num_users, -1)).tolist()
+        for i in range(num_users):
+            for target_i in target_split[i]:
+                idx = torch.randint(len(target_idx_split[target_i]), (1,)).item()
+                data_split[i].extend(target_idx_split[target_i].pop(idx))
+    else:  # dirichlet non-iid with beta parameter
+        beta = float(data_split_mode_list[-1])
+        dir = torch.distributions.dirichlet.Dirichlet(torch.tensor(beta).repeat(num_users))
+        min_size = 0
+        required_min_size = 10
+        N = target.size(0)
+        while min_size < required_min_size:
+            data_split = [[] for _ in range(num_users)]
+            for target_i in range(cfg["target_size"]):
+                target_idx = torch.where(target == target_i)[0]
+                proportions = dir.sample()
+                proportions = torch.tensor(
+                    [p * (len(data_split_idx) < (N / num_users)) for p, data_split_idx in zip(proportions, data_split)]
+                )
+                proportions = proportions / proportions.sum()
+                split_idx = (torch.cumsum(proportions, dim=-1) * len(target_idx)).long().tolist()[:-1]
+                split_idx = torch.tensor_split(target_idx, split_idx)
+                data_split = [data_split_idx + idx.tolist() for data_split_idx, idx in zip(data_split, split_idx)]
+            min_size = min([len(data_split_idx) for data_split_idx in data_split])
+        data_split = {i: data_split[i] for i in range(num_users)}
+    return data_split
 
 
 class FixTransform(object):

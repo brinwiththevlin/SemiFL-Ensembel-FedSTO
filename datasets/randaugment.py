@@ -35,10 +35,22 @@ def Cutout(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
     v = int(v * min(img.size))
     w, h = img.size
-    x0 = torch.FloatTensor(1, ).uniform_(0, w).item()
-    y0 = torch.FloatTensor(1, ).uniform_(0, h).item()
-    x0 = int(max(0, x0 - v / 2.))
-    y0 = int(max(0, y0 - v / 2.))
+    x0 = (
+        torch.FloatTensor(
+            1,
+        )
+        .uniform_(0, w)
+        .item()
+    )
+    y0 = (
+        torch.FloatTensor(
+            1,
+        )
+        .uniform_(0, h)
+        .item()
+    )
+    x0 = int(max(0, x0 - v / 2.0))
+    y0 = int(max(0, y0 - v / 2.0))
     x1 = int(min(w, x0 + v))
     y1 = int(min(h, y0 + v))
     xy = (x0, y0, x1, y1)
@@ -52,10 +64,22 @@ def Cutout(img, v, max_v, **kwarg):
 def CutoutConst(img, v, max_v, **kwarg):
     v = _int_parameter(v, max_v)
     w, h = img.size
-    x0 = torch.FloatTensor(1, ).uniform_(0, w).item()
-    y0 = torch.FloatTensor(1, ).uniform_(0, h).item()
-    x0 = int(max(0, x0 - v / 2.))
-    y0 = int(max(0, y0 - v / 2.))
+    x0 = (
+        torch.FloatTensor(
+            1,
+        )
+        .uniform_(0, w)
+        .item()
+    )
+    y0 = (
+        torch.FloatTensor(
+            1,
+        )
+        .uniform_(0, h)
+        .item()
+    )
+    x0 = int(max(0, x0 - v / 2.0))
+    y0 = int(max(0, y0 - v / 2.0))
     x1 = int(min(w, x0 + v))
     y1 = int(min(h, y0 + v))
     xy = (x0, y0, x1, y1)
@@ -85,7 +109,12 @@ def Posterize(img, v, max_v, bias, **kwarg):
 
 def Rotate(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     return img.rotate(v)
 
@@ -97,14 +126,24 @@ def Sharpness(img, v, max_v, bias):
 
 def ShearX(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     return img.transform(img.size, PIL.Image.AFFINE, (1, v, 0, 0, 1, 0), RESAMPLE_MODE)
 
 
 def ShearY(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, v, 1, 0), RESAMPLE_MODE)
 
@@ -116,7 +155,12 @@ def Solarize(img, v, max_v, **kwarg):
 
 def SolarizeAdd(img, v, max_v, threshold=128, **kwarg):
     v = _int_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     img_np = np.array(img).astype(np.int)
     img_np = img_np + v
@@ -128,7 +172,12 @@ def SolarizeAdd(img, v, max_v, threshold=128, **kwarg):
 
 def TranslateX(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     v = int(v * img.size[0])
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0), RESAMPLE_MODE)
@@ -136,7 +185,12 @@ def TranslateX(img, v, max_v, **kwarg):
 
 def TranslateY(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() < 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        < 0.5
+    ):
         v = -v
     v = int(v * img.size[1])
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v), RESAMPLE_MODE)
@@ -144,14 +198,24 @@ def TranslateY(img, v, max_v, **kwarg):
 
 def TranslateXConst(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() > 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        > 0.5
+    ):
         v = -v
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, v, 0, 1, 0), RESAMPLE_MODE)
 
 
 def TranslateYConst(img, v, max_v, **kwarg):
     v = _float_parameter(v, max_v)
-    if torch.rand(1,).item() > 0.5:
+    if (
+        torch.rand(
+            1,
+        ).item()
+        > 0.5
+    ):
         v = -v
     return img.transform(img.size, PIL.Image.AFFINE, (1, 0, 0, 0, 1, v), RESAMPLE_MODE)
 
@@ -165,29 +229,30 @@ def _int_parameter(v, max_v):
 
 
 def rand_augment_pool():
-    augs = [(AutoContrast, None, None),
-            (Brightness, 1.8, 0.1),
-            (Color, 1.8, 0.1),
-            (Contrast, 1.8, 0.1),
-            (CutoutConst, 40, None),
-            (Equalize, None, None),
-            (Invert, None, None),
-            (Posterize, 4, 0),
-            (Rotate, 30, None),
-            (Sharpness, 1.8, 0.1),
-            (ShearX, 0.3, None),
-            (ShearY, 0.3, None),
-            (Solarize, 256, None),
-            (TranslateXConst, 100, None),
-            (TranslateYConst, 100, None),
-            ]
+    augs = [
+        (AutoContrast, None, None),
+        (Brightness, 1.8, 0.1),
+        (Color, 1.8, 0.1),
+        (Contrast, 1.8, 0.1),
+        (CutoutConst, 40, None),
+        (Equalize, None, None),
+        (Invert, None, None),
+        (Posterize, 4, 0),
+        (Rotate, 30, None),
+        (Sharpness, 1.8, 0.1),
+        (ShearX, 0.3, None),
+        (ShearY, 0.3, None),
+        (Solarize, 256, None),
+        (TranslateXConst, 100, None),
+        (TranslateYConst, 100, None),
+    ]
     return augs
 
 
 class RandAugment(object):
     def __init__(self, n, m, resample_mode=PIL.Image.BILINEAR):
-        assert n >= 1
-        assert m >= 1
+        assert n >= 1, "RandAugment(n, m): n must be positive integer."
+        assert m >= 1, "RandAugment(n, m): m must be positive integer."
         global RESAMPLE_MODE
         RESAMPLE_MODE = resample_mode
         self.n = n
@@ -197,7 +262,19 @@ class RandAugment(object):
     def __call__(self, img):
         ops = [self.augment_pool[i] for i in torch.randint(len(self.augment_pool), (self.n,)).tolist()]
         for op, max_v, bias in ops:
-            prob = torch.FloatTensor(1, ).uniform_(0.2, 0.8).item()
-            if torch.rand(1,).item() + prob >= 1:
+            prob = (
+                torch.FloatTensor(
+                    1,
+                )
+                .uniform_(0.2, 0.8)
+                .item()
+            )
+            if (
+                torch.rand(
+                    1,
+                ).item()
+                + prob
+                >= 1
+            ):
                 img = op(img, v=self.m, max_v=max_v, bias=bias)
         return img
