@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from config import cfg
 from utils import recur
+import datasets
 
 
 def Accuracy(output, target, topk=1):
@@ -44,12 +45,10 @@ class Metric(object):
         }
 
     def make_pivot(self):
-        if cfg["data_name"] in ["MNIST", "FashionMNIST", "CIFAR10", "CIFAR100", "SVHN", "STL10"]:
-            pivot = -float("inf")
-            pivot_direction = "up"
-            pivot_name = "Accuracy"
-        else:
-            raise ValueError("Not valid data name")
+        assert cfg["data_name"] in datasets.__all__, "Not valid data name"
+        pivot = -float("inf")
+        pivot_direction = "up"
+        pivot_name = "Accuracy"
         return pivot, pivot_name, pivot_direction
 
     def evaluate(self, metric_names, input, output):

@@ -2,11 +2,20 @@ import torch
 from config import cfg
 import torch.optim as optim
 import numpy as np
-from typing import Dict, List, Union, Generator
+from typing import Dict, List, Union, Generator, Any
 from torch.utils.data import Dataset
 
 
-def to_device(input, device):
+def to_device(input: Any, device: torch.device) -> Any:
+    """recursive function to move input to device
+
+    Args:
+        input (Any): input to move
+        device (torch.device): target device
+
+    Returns:
+        Any: moved input
+    """
     output = recur(lambda x, y: x.to(y), input, device)
     return output
 
@@ -66,7 +75,31 @@ def process_dataset(dataset: Dict[str, Dataset]) -> None:
     return
 
 
-def recur(fn, input, *args):
+def recur(
+    fn: function, input: Union[torch.Tensor, np.ndarray, list, tuple, dict, str, None], *args: Any
+) -> Union[torch.Tensor, np.ndarray, list, tuple, dict, str, None]:
+    """recusive function to apply fn to input
+
+    Args:
+        fn (function): function to apply
+        input (Any): input to apply fn
+
+    Returns:
+        Any: transformed object, same type as input
+    """
+    assert callable(fn), "Not valid function"
+    assert any(
+        [
+            isinstance(input, torch.Tensor),
+            isinstance(input, np.ndarray),
+            isinstance(input, list),
+            isinstance(input, tuple),
+            isinstance(input, dict),
+            isinstance(input, str),
+            input is None,
+        ]
+    ), "Not valid input type"
+
     if isinstance(input, torch.Tensor) or isinstance(input, np.ndarray):
         output = fn(input, *args)
     elif isinstance(input, list):

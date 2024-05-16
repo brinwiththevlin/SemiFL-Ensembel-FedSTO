@@ -13,10 +13,11 @@ from data import make_data_loader, make_batchnorm_stats, FixTransform, MixDatase
 from utils import to_device, make_optimizer, collate, to_device
 from metrics import Accuracy
 from torch.utils.data import Dataset
+from typing import OrderedDict
 
 
 class Server:
-    def __init__(self, model):
+    def __init__(self, model: nn.Module):
         assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid server loss mode"
         self.model_state_dict = save_model_state_dict(model.state_dict())
         optimizer = make_optimizer(model.parameters(), "local")
@@ -305,11 +306,27 @@ class Client:
         return
 
 
-def save_model_state_dict(model_state_dict):
+def save_model_state_dict(model_state_dict: OrderedDict[str, torch.Tensor]) -> OrderedDict[str, torch.Tensor]:
+    """sends the model state dict to the cpu
+
+    Args:
+        model_state_dict (OrderedDict[str, torch.Tensor]): saved model state dict
+
+    Returns:
+        OrderedDict[str, torch.Tensor]: model state dict on the cpu
+    """
     return {k: v.cpu() for k, v in model_state_dict.items()}
 
 
-def save_optimizer_state_dict(optimizer_state_dict):
+def save_optimizer_state_dict(optimizer_state_dict: dict) -> dict:
+    """sends the optimizer state dict to the cpu
+
+    Args:
+        optimizer_state_dict (dict): saved optimizer state dict
+
+    Returns:
+        dict: optimizer state dict on the cpu
+    """
     optimizer_state_dict_ = {}
     for k, v in optimizer_state_dict.items():
         if k == "state":

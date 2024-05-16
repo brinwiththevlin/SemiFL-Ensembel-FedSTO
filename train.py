@@ -72,26 +72,27 @@ def runExperiment():
         {"train": ["Loss", "Accuracy", "PAccuracy", "MAccuracy", "LabelRatio"], "test": ["Loss", "Accuracy"]}
     )
 
-    if cfg["resume_mode"] == 1:
-        result = resume(cfg["model_tag"])
-        last_epoch = result["epoch"]
-        if last_epoch > 1:
-            data_split = result["data_split"]
-            supervised_idx = result["supervised_idx"]
-            server = result["server"]
-            client = result["client"]
-            optimizer.load_state_dict(result["optimizer_state_dict"])
-            scheduler.load_state_dict(result["scheduler_state_dict"])
-            logger = result["logger"]
-        else:
-            server = make_server(model)
-            client = make_client(model, data_split)
-            logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
-    else:
-        last_epoch = 1
-        server: Server = make_server(model)
-        client: list[Client] = make_client(model, data_split)
-        logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
+    # if cfg["resume_mode"] == 1:
+    #     result = resume(cfg["model_tag"])
+    #     last_epoch = result["epoch"]
+    #     if last_epoch > 1:
+    #         data_split = result["data_split"]
+    #         supervised_idx = result["supervised_idx"]
+    #         server = result["server"]
+    #         client = result["client"]
+    #         optimizer.load_state_dict(result["optimizer_state_dict"])
+    #         scheduler.load_state_dict(result["scheduler_state_dict"])
+    #         logger = result["logger"]
+    #     else:
+    #         server = make_server(model)
+    #         client = make_client(model, data_split)
+    #         logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
+    # else:
+
+    last_epoch = 1
+    server: Server = make_server(model)
+    client: list[Client] = make_client(model, data_split)
+    logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
 
     # Training
     for epoch in range(last_epoch, cfg["global"]["num_epochs"] + 1):
@@ -132,12 +133,29 @@ def runExperiment():
     return
 
 
-def make_server(model):
+def make_server(model: nn.Module) -> Server:
+    """returns a server object
+
+    Args:
+        model (nn.Module): machine learning model
+
+    Returns:
+        Server: server object
+    """
     server = Server(model)
     return server
 
 
-def make_client(model: nn.Module, data_split):
+def make_client(model: nn.Module, data_split: Dict[str, Dict[int, List[int]]]) -> List[Client]:
+    """creates a list of client objects
+
+    Args:
+        model (nn.Module): machine learning model
+        data_split (Dict[str, Dict[int, List[int]]]): dictionary of data split. keys: "train", "test"
+
+    Returns:
+        List[Client]: list of client objects
+    """
     client_id = torch.arange(cfg["num_clients"])
     client = [None for _ in range(cfg["num_clients"])]
     for m in range(len(client)):
