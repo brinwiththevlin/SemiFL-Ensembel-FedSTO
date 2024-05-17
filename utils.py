@@ -20,7 +20,15 @@ def to_device(input: Any, device: torch.device) -> Any:
     return output
 
 
-def collate(input):
+def collate(input: Dict[str, List[Union[torch.Tensor, np.ndarray]]]) -> Dict[str, torch.Tensor]:
+    """collate function for DataLoader
+
+    Args:
+        input (Dict[str, List[Union[torch.Tensor, np.ndarray]]]): dictionary of list of tensors
+
+    Returns:
+        Dict[str, torch.Tensor]: dictionary of stacked tensors
+    """
     for k in input:
         input[k] = torch.stack(input[k], 0)
     return input

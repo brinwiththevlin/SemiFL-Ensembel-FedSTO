@@ -6,6 +6,7 @@ import shutil
 import time
 import torch
 import torch.backends.cudnn as cudnn
+from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from config import cfg, process_args
 from data import (
@@ -14,13 +15,11 @@ from data import (
     make_data_loader,
     separate_dataset,
     separate_dataset_su,
-    make_batchnorm_dataset_su,
-    make_batchnorm_stats,
 )
 from metrics import Metric
 from modules import Server, Client
 from utils import save, to_device, process_control, process_dataset, make_optimizer, make_scheduler, resume, collate
-from logger import make_logger
+from logger import make_logger, Logger
 from typing import Dict, List, Union
 import torch.nn as nn
 
@@ -62,9 +61,6 @@ def runExperiment():
     optimizer = make_optimizer(model.parameters(), "local")
     scheduler = make_scheduler(optimizer, "global")
 
-    # sbn: static batch normalization
-    batchnorm_dataset = make_batchnorm_dataset_su(server_dataset["train"], client_dataset["train"])
-
     data_split = split_dataset(client_dataset, cfg["num_clients"], cfg["data_split_mode"])
 
     # TODO: change this based on final loss mode
@@ -89,47 +85,50 @@ def runExperiment():
     #         logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
     # else:
 
-    last_epoch = 1
+    last_epoch = 0
     server: Server = make_server(model)
     client: list[Client] = make_client(model, data_split)
     logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
 
     # Training
-    for epoch in range(last_epoch, cfg["global"]["num_epochs"] + 1):
-        train_client(batchnorm_dataset, client_dataset["train"], server, client, optimizer, metric, logger, epoch)
+    Warmup(server_dataset["train"], server, optimizer, metric, logger, cfg["T0"])
+    for epoch in range(last_epoch, cfg["global"]["num_epochs"]):
+        train_client(client_dataset["train"], server, client, optimizer, metric, logger, epoch)
+    # for epoch in range(last_epoch, cfg["global"]["num_epochs"] + 1):
+    #     train_client(batchnorm_dataset, client_dataset["train"], server, client, optimizer, metric, logger, epoch)
 
-        if "ft" in cfg and cfg["ft"] == 0:
-            train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
-            logger.reset()
-            server.update_parallel(client)
-        else:
-            logger.reset()
-            server.update(client)
-            train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
+    #     if "ft" in cfg and cfg["ft"] == 0:
+    #         train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
+    #         logger.reset()
+    #         server.update_parallel(client)
+    #     else:
+    #         logger.reset()
+    #         server.update(client)
+    #         train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
 
-        scheduler.step()
-        model.load_state_dict(server.model_state_dict)
-        test_model = make_batchnorm_stats(batchnorm_dataset, model, "global")
-        test(data_loader["test"], test_model, metric, logger, epoch)
-        result = {
-            "cfg": cfg,
-            "epoch": epoch + 1,
-            "server": server,
-            "client": client,
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "supervised_idx": supervised_idx,
-            "data_split": data_split,
-            "logger": logger,
-        }
-        save(result, "./output/model/{}_checkpoint.pt".format(cfg["model_tag"]))
-        if metric.compare(logger.mean["test/{}".format(metric.pivot_name)]):
-            metric.update(logger.mean["test/{}".format(metric.pivot_name)])
-            shutil.copy(
-                "./output/model/{}_checkpoint.pt".format(cfg["model_tag"]),
-                "./output/model/{}_best.pt".format(cfg["model_tag"]),
-            )
-        logger.reset()
+    #     scheduler.step()
+    #     model.load_state_dict(server.model_state_dict)
+    #     test_model = make_batchnorm_stats(batchnorm_dataset, model, "global")
+    #     test(data_loader["test"], test_model, metric, logger, epoch)
+    #     result = {
+    #         "cfg": cfg,
+    #         "epoch": epoch + 1,
+    #         "server": server,
+    #         "client": client,
+    #         "optimizer_state_dict": optimizer.state_dict(),
+    #         "scheduler_state_dict": scheduler.state_dict(),
+    #         "supervised_idx": supervised_idx,
+    #         "data_split": data_split,
+    #         "logger": logger,
+    #     }
+    #     save(result, "./output/model/{}_checkpoint.pt".format(cfg["model_tag"]))
+    #     if metric.compare(logger.mean["test/{}".format(metric.pivot_name)]):
+    #         metric.update(logger.mean["test/{}".format(metric.pivot_name)])
+    #         shutil.copy(
+    #             "./output/model/{}_checkpoint.pt".format(cfg["model_tag"]),
+    #             "./output/model/{}_best.pt".format(cfg["model_tag"]),
+    #         )
+    #     logger.reset()
     return
 
 
@@ -163,8 +162,47 @@ def make_client(model: nn.Module, data_split: Dict[str, Dict[int, List[int]]]) -
     return client
 
 
-def train_client(batchnorm_dataset, client_dataset, server, client, optimizer, metric, logger, epoch):
-    raise NotImplementedError
+def train_client(
+    client_dataset: Dataset,
+    server: Server,
+    client: List[Client],
+    optimizer: torch.optim.Optimizer,
+    metric: Metric,
+    logger: Logger,
+    epoch: int,
+):
+    logger.safe(True)
+    num_active_clients = int(np.ceil(cfg["active_rate"] * cfg["num_clients"]))
+    client_id: list = torch.randperm(cfg["num_clients"])[:num_active_clients].tolist()
+    for i in range(num_active_clients):
+        client[client_id[i]].active = True
+    server.distribute(client)
+
+
+def Warmup(
+    dataset: Dataset,
+    server: Server,
+    optimizer: torch.optim.Optimizer,
+    metric: Metric,
+    logger: Logger,
+    rounds: int,
+):
+    """does warmup training on the server
+
+    Args:
+        dataset (Dataset): supeverised training dataset
+        server (Server): Server object
+        optimizer (torch.optim.Optimizer): optimizer
+        metric (Metric): metric object
+        logger (Logger): logger object
+        rounds (int): number of warmup rounds
+
+    """
+    Logger.safe(True)
+    for _ in range(rounds):
+        server.train(dataset, optimizer, metric, logger)
+        logger.reset()
+    return server
 
 
 def train_server(dataset, server, optimizer, metric, logger, epoch):

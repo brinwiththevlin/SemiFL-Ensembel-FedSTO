@@ -19,22 +19,18 @@ def init_param(m):
     return m
 
 
-def make_batchnorm(m, momentum: float, track_running_stats: bool):
-    if isinstance(m, nn.BatchNorm2d):
-        m.momentum = momentum
-        m.track_running_stats = track_running_stats
-        if track_running_stats:
-            m.register_buffer("running_mean", torch.zeros(m.num_features, device=m.weight.device))
-            m.register_buffer("running_var", torch.ones(m.num_features, device=m.weight.device))
-            m.register_buffer("num_batches_tracked", torch.tensor(0, dtype=torch.long, device=m.weight.device))
-        else:
-            m.running_mean = None
-            m.running_var = None
-            m.num_batches_tracked = None
-    return m
+# TODO: change this based on final loss calculation
+def loss_fn(output: torch.Tensor, target: torch.Tensor, reduction="mean") -> torch.Tensor:
+    """loss function
 
+    Args:
+        output (torch.Tensor): inference output
+        target (torch.Tensor): target
+        reduction (str, optional): reduction method. Defaults to "mean".
 
-def loss_fn(output, target, reduction="mean"):
+    Returns:
+        torch.Tensor: loss
+    """
     if target.dtype == torch.int64:
         loss = F.cross_entropy(output, target, reduction=reduction)
     else:

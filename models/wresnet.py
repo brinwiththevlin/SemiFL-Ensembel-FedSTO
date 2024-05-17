@@ -78,7 +78,7 @@ class WideResNet(nn.Module):
         x = self.classifier(x)
         return x
 
-    def forward(self, input):
+    def forward(self, input: dict) -> dict:
         output = {}
         output["target"] = self.f(input["data"])
         if "loss_mode" in input:
@@ -110,7 +110,6 @@ def wresnet28x2(momentum: float = None, track: bool = False) -> WideResNet:
     drop_rate = cfg["wresnet28x2"]["drop_rate"]
     model = WideResNet(data_shape, target_size, depth, widen_factor, drop_rate)
     model.apply(init_param)
-    model.apply(lambda m: make_batchnorm(m, momentum=momentum, track_running_stats=track))
     return model
 
 

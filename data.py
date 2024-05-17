@@ -140,21 +140,11 @@ def separate_dataset_su(
     return _server_dataset, _client_dataset, supervised_idx
 
 
-def make_batchnorm_dataset_su(server_dataset: Dataset, client_dataset: Dataset) -> Dataset:
-    """make batchnorm dataset for supervised training
-
-    Args:
-        server_dataset (Dataset): server dataset
-        client_dataset (Dataset): client dataset
-
-    Returns:
-        Dataset: batchnorm dataset
-    """
-    batchnorm_dataset = copy.deepcopy(server_dataset)
-    batchnorm_dataset.data = batchnorm_dataset.data + client_dataset.data
-    batchnorm_dataset.target = batchnorm_dataset.target + client_dataset.target
-    batchnorm_dataset.other["id"] = batchnorm_dataset.other["id"] + client_dataset.other["id"]
-    return batchnorm_dataset
+def make_dataset_normal(dataset: Dataset) -> Tuple[Dataset, transforms.Compose]:
+    _transform = dataset.transform
+    transform = datasets.Compose([transforms.ToTensor(), transforms.Normalize(*data_stats[cfg["data_name"]])])
+    dataset.transform = transform
+    return dataset, _transform
 
 
 def input_collate(batch):
