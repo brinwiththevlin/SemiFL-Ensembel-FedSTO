@@ -1,9 +1,7 @@
-import math
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from .utils import init_param, make_batchnorm, loss_fn
-from config import cfg
+from .utils import init_param, loss_fn
+from typing import Tuple
 
 d_vaules: dict = {"n": 0.333, "s": 0.333, "m": 0.667, "l": 1.0, "x": 1.0}
 w_vaules: dict = {"n": 0.25, "s": 0.5, "m": 0.75, "l": 1.0, "x": 1.25}
@@ -19,7 +17,7 @@ class Conv(nn.Module):
         self.bn = nn.BatchNorm2d(out_channels)
         self.silu = nn.SiLU(inplace=True)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv(x)
         out = self.bn(out)
         out = self.silu(out)
@@ -33,7 +31,7 @@ class BottleNeck(nn.Module):
         self.conv1 = Conv(channels, channels, 3, 1, 1)
         self.conv2 = Conv(channels, channels, 3, 1, 1)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv1(x)
         out = self.conv2(out)
         if self.shorcut:
@@ -50,7 +48,7 @@ class SPPF(nn.Module):
         self.pool3 = nn.MaxPool2d(kernel_size=5, stride=1, padding=2)
         self.conv2 = Conv(in_channels * 4, out_channels, 1, 1, 0)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         pool1 = self.pool1(x)
         pool2 = self.pool2(x)
@@ -67,7 +65,7 @@ class C2F(nn.Module):
         self.bottleneck = nn.Sequential(*[BottleNeck(out_channels // 2, shortcut) for _ in range(num_bottelneck)])
         self.conv2 = Conv(0.5 * (num_bottelneck + 2) * out_channels, out_channels, 1, 1, 0)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.conv1(x)
         y1, y2 = x.split(x.size(1) // 2, dim=1)
         outputs = [y1, y2]
@@ -108,7 +106,7 @@ class BackBone(nn.Module):
         self.C2f4 = C2F(int(512 * w * r), int(512 * w * r), int(6 * d), True)
         self.sppf = SPPF(int(512 * w * r), int(512 * w * r))
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.C2f1(x)
@@ -149,7 +147,7 @@ class Neck(nn.Module):
         self.conv2 = Conv(int(512 * w), int(512 * w), 3, 2, 1)
         self.c2f4 = C2F(int(512 * w * (1 + r)), int(512 * w * r), int(3 * d), False)
 
-    def forward(self):
+    def forward(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.up1(self.bb_output)
         x = torch.cat([x, self.bb_residual2], dim=1)
         x = self.C2f1(x)
@@ -187,7 +185,7 @@ class Head(nn.Module):
         self.detect2 = Detect()  # TODO: Implement Detect class
         self.detect3 = Detect()  # TODO: Implement Detect class
 
-    def forward(self):
+    def forward(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.detect1(self.residual1)
         y = self.detect2(self.residual2)
         z = self.detect3(self.residual3)
