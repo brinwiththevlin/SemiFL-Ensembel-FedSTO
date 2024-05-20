@@ -1,0 +1,44 @@
+\section{Method}
+
+\begin{algorithm}
+	\caption{The proposed method}
+	% \hspace*{\algorithmicindent} \textbf{Input:} server model parameterized by $W_s$, the number of rounds for
+	% each phase $T_1$, $T_2$, client models parameterized by $\{W_{u,1}, ..., W_{u,M}\}$, client backbone par
+	% parameterized by $\{B_{u,1},..., B_{u,M}\}$\\
+	\begin{algorithmic}[1]
+		\Procedure{train}{}
+
+		\State $W_{s,faster}, W_{s,yolo}\gets \operatorname{WarmUp}()$
+		\Statex \textbf{/* Phase 1: Selective Training for Pretraining */}
+
+		\For{$i \gets 1$ \textbf{to} $T_1$}
+		\State $S^t \gets \operatorname{SelectClients}()$
+
+		\For{ each client $k \in S^t$ in parallel}
+		\State $W_{u,k,yolo}, W_{u,k,faster} \gets \operatorname{UpdateClientBackbone}(x_{u,k},y_{u,k}, B_{u,k,yolo},
+			B_{u,k,faster})$
+		\EndFor
+
+		\State $W_{s,yolo} \gets \operatorname{Aggregate}(W_{s,yolo}, \{W_{u,1,yolo}, \ldots, W_{u,M,yolo}\})$
+		\State $W_{s,faster} \gets \operatorname{Aggregate}(W_{s,faster}, \{W_{u,1,faster}, \ldots, W_{u,M,faster}\})$
+        \State $W_{s,yolo}, W_{s,faster} \gets \operatorname{UpdateServer}(W_{s,yolo}, W_{s,faster})$
+		\EndFor
+
+        \Statex \textbf{/* Phase 2: Joint Training for Fine-tuning */}
+
+        \For{$i \gets 1$ \textbf{to} $T_2$}
+        \State $S^t \gets \operatorname{SelectClients}()$
+
+        \For{ each client $k \in S^t$ in parallel}
+        \State $W_{u,k,yolo}, W_{u,k,faster} \gets \operatorname{ClientOrthogonalUpdate}(x_{u,k},y_{u,k}, B_{u,k,yolo},
+            B_{u,k,faster})$
+        \EndFor
+
+        \State $W_{s,yolo} \gets \operatorname{Aggregate}(W_{s,yolo}, \{W_{u,1,yolo}, \ldots, W_{u,M,yolo}\})$
+        \State $W_{s,faster} \gets \operatorname{Aggregate}(W_{s,faster}, \{W_{u,1,faster}, \ldots, W_{u,M,faster}\})$
+        \State $W_{s,yolo}, W_{s,faster} \gets \operatorname{ServerOrthogonalUpdate}(W_{s,yolo}, W_{s,faster})$
+        \EndFor
+
+		\EndProcedure
+	\end{algorithmic}
+\end{algorithm}
