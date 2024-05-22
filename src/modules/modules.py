@@ -139,12 +139,9 @@ class Server:
         Args:
             client (List[Client]): list of clients
         """
-        model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
-        model.load_state_dict(self.model_state_dict)
-        model_state_dict = save_model_state_dict(model.state_dict())
         for m in range(len(client)):
             if client[m].active:
-                client[m].model_state_dict = copy.deepcopy(model_state_dict)
+                client[m].model_state_dict = copy.deepcopy(self.model_state_dict)
         return
 
     def update(self, client):

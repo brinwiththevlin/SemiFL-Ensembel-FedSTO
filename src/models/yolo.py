@@ -3,6 +3,7 @@ import torch.nn as nn
 from .utils import init_param, loss_fn
 from typing import Tuple
 
+
 d_vaules: dict = {"n": 0.333, "s": 0.333, "m": 0.667, "l": 1.0, "x": 1.0}
 w_vaules: dict = {"n": 0.25, "s": 0.5, "m": 0.75, "l": 1.0, "x": 1.25}
 r_vaules: dict = {"n": 2.0, "s": 2.0, "m": 1.5, "l": 1.0, "x": 1.0}
@@ -78,11 +79,22 @@ class C2F(nn.Module):
 
 
 class Detect(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, num_classes: int) -> None:
-        raise NotImplementedError
+    def __init__(self, in_channels: int, num_classes: int, reg_max: int) -> None:
+        self.conv1 = Conv(in_channels, in_channels, 3, 1, 1)
+        self.conv2 = Conv(in_channels, in_channels, 3, 1, 1)
+        self.conv3 = Conv(in_channels, in_channels, 3, 1, 1)
+        self.conv4 = Conv(in_channels, in_channels, 3, 1, 1)
+        self.reg_max = reg_max
+        self.num_classes = num_classes
 
-    def forward():
-        raise NotImplementedError
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        x1 = self.conv1(x)
+        x1 = self.conv2(x1)
+        x1 = nn.Conv2d(x1, 4 * self.reg_max, 1, 1, 0)
+        x2 = self.conv3(x)
+        x2 = self.conv4(x2)
+        x2 = nn.Conv2d(x2, self.num_classes, 1, 1, 0)
+        return x1, x2
 
 
 class BackBone(nn.Module):
@@ -123,21 +135,15 @@ class BackBone(nn.Module):
 
 
 class Neck(nn.Module):
-    def __init__(self, c2f_2: torch.Tensor, c2f_3: torch.Tensor, sppf: torch.Tensor, w: int, d: int, r: int) -> None:
+    def __init__(self, w: int, d: int, r: int) -> None:
         """model neck, takes intermediate outputs of backbone and sppf
 
         Args:
-            c2f_2 (torch.Tensor): output of second c2f block. shape: (80, 80, 256*w)
-            c2f_3 (torch.Tensor): output of third c2f block. shape: (40, 40, 512*w)
-            sppf (torch.Tensor): output of sppf block. shape: (20, 20, 512*w*r)
             w (int): width multiplier
             d (int): depth multiplier
             r (int): resolution multiplier
         """
         super().__init__()
-        self.bb_residual1 = c2f_2
-        self.bb_residual2 = c2f_3
-        self.bb_output = sppf
         self.up1 = nn.Upsample(scale_factor=2)
         self.C2f1 = C2F(int(512 * w * (r + 1)), int(512 * w), int(3 * d), False)
         self.up2 = nn.Upsample(scale_factor=2)
@@ -147,7 +153,12 @@ class Neck(nn.Module):
         self.conv2 = Conv(int(512 * w), int(512 * w), 3, 2, 1)
         self.c2f4 = C2F(int(512 * w * (1 + r)), int(512 * w * r), int(3 * d), False)
 
-    def forward(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, c2f_2: torch.Tensor, c2f_3: torch.Tensor, sppf: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self.bb_residual1 = c2f_2
+        self.bb_residual2 = c2f_3
+        self.bb_output = sppf
         x = self.up1(self.bb_output)
         x = torch.cat([x, self.bb_residual2], dim=1)
         x = self.C2f1(x)
@@ -167,25 +178,27 @@ class Neck(nn.Module):
 
 
 class Head(nn.Module):
-    def __init__(self, c2f_2: torch.Tensor, c2f_3: torch.Tensor, c2f_4: torch.Tensor, w: int, d: int, r: int) -> None:
+    def __init__(self, w: int, d: int, r: int, num_classes: int, reg_max: int) -> None:
         """head of the model
 
         Args:
-            c2f_2 (torch.Tensor): output of second c2f block. shape: (80, 80, 256*w)
-            c2f_3 (torch.Tensor): output of third c2f block. shape: (40, 40, 512*w)
-            c2f_4 (torch.Tensor): output of fourth c2f block. shape: (20, 20, 512*w*r)
             w (int): width multiplier
             d (int): depth multiplier
             r (int): resolution multiplier
+            num_classes (int): number of classes
+            reg_max (int): maximum number of regions
         """
+        super().__init__()
+        self.detect1 = Detect(in_channels=256 * w, num_classes=num_classes, reg_max=reg_max)
+        self.detect2 = Detect(in_channels=512 * w, num_classes=num_classes, reg_max=reg_max)
+        self.detect3 = Detect(in_channels=512 * w * r, num_classes=num_classes, reg_max=reg_max)
+
+    def forward(
+        self, c2f_2: torch.Tensor, c2f_3: torch.Tensor, c2f_4: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         self.residual1 = c2f_2
         self.residual2 = c2f_3
         self.residual3 = c2f_4
-        self.detect1 = Detect()  # TODO: Implement Detect class
-        self.detect2 = Detect()  # TODO: Implement Detect class
-        self.detect3 = Detect()  # TODO: Implement Detect class
-
-    def forward(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.detect1(self.residual1)
         y = self.detect2(self.residual2)
         z = self.detect3(self.residual3)
@@ -193,16 +206,53 @@ class Head(nn.Module):
 
 
 class YOLOv8(nn.Module):
-    def __init__(self, mode):
+    def __init__(
+        self,
+        mode,
+        num_classes: int,
+        reg_max: int,
+        pre_train: bool = False,
+        freeze: bool = False,
+        bb_wights: dict = None,
+    ) -> None:
+        """YOLOv8 model
+
+        Args:
+            mode (char): model size. one of ["n", "s", "m", "l", "x"]
+            num_classes (int): number of classes
+            reg_max (int): maximum number of regions
+            pre_train (bool, optional): if pre_train is true, only train the backbone. other parts are frozen. Defaults to False.
+            freeze(bool, optional): if freeze is true, only train the backbone and neck. head is frozen. Defaults to False.
+            bb_wights (dict, optional): path to backbone weights. Defaults to None.
+        """
         assert mode in ["n", "s", "m", "l", "x"], f"Invalid mode {mode}"
+        assert num_classes > 0, "num_classes should be greater than 0"
+        assert reg_max > 0, "reg_max should be greater than 0"
+        assert (pre_train and bb_wights) or not pre_train, "pre_train should be true only if bb_weights are provided"
+        super().__init__()
         self.w = w_vaules[mode]
         self.d = d_vaules[mode]
         self.r = r_vaules[mode]
         self.backbone = BackBone(self.w, self.d, self.r)
         self.neck = Neck(self.w, self.d, self.r)
-        self.head = Head(self.w, self.d, self.r)
+        self.head = Head(self.w, self.d, self.r, num_classes, reg_max)
+        self.pre_train = pre_train
+        self.freeze = freeze
 
-    def forward(self, x: torch.Tensor):
+        if not pre_train:
+            init_param(self.backbone)
+            init_param(self.neck)
+            init_param(self.head)
+        else:
+            self.backbone.load_state_dict(bb_wights)
+
+        if freeze:
+            for param in self.neck.parameters():
+                param.requires_grad = False
+            for param in self.head.parameters():
+                param.requires_grad = False
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         residual1, residual2, bb_output = self.backbone(x)
         residual1, residual2, neck_output = self.neck(residual1, residual2, bb_output)
         x, y, z = self.head(residual1, residual2, neck_output)
