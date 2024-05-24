@@ -1,18 +1,16 @@
 import copy
-import datetime
 import numpy as np
-import sys
-import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import models
 from itertools import compress
 from config import cfg
-from data import make_data_loader, FixTransform, MixDataset
-from utils import to_device, make_optimizer, collate, to_device
-from metrics import Accuracy
+from data import make_data_loader, MixDataset
+from utils import make_optimizer, collate, to_device
+from metrics import Metric
 from torch.utils.data import Dataset
+from logger import Logger
 from typing import OrderedDict, List
 
 
@@ -75,7 +73,7 @@ class Client:
             else:
                 return None
 
-    def train(self, dataset, lr, metric, logger):
+    def train(self, dataset: Dataset, lr: float, metric: Metric, logger: Logger, selective: bool = False):
         assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid client loss mode"
         assert not any(
             match in cfg["loss_mode"] for match in ["batch", "frgd", "fmatch", "sup"]
@@ -84,12 +82,16 @@ class Client:
         fix_dataset, mix_dataset = dataset
         fix_data_loader = make_data_loader({"train": fix_dataset}, "client")["train"]
         mix_data_loader = make_data_loader({"train": mix_dataset}, "client")["train"]
-        model = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
+        model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
         model.load_state_dict(self.model_state_dict, strict=False)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
         optimizer = make_optimizer(model.parameters(), "local")
         optimizer.load_state_dict(self.optimizer_state_dict)
-        model.train(True)
+        if selective:
+            # efficient teacher with head and neck freezing (torch.no_grad())
+            raise NotImplementedError
+        else:
+            model.train(True)
         if cfg["client"]["num_epochs"] == 1:
             num_batches = int(np.ceil(len(fix_data_loader) * float(cfg["local_epoch"][0])))
         else:

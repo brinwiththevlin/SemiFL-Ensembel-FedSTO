@@ -3,10 +3,18 @@ from collections.abc import Iterable
 from torch.utils.tensorboard import SummaryWriter
 from numbers import Number
 from utils import ntuple
+import os
 
 
 class Logger:
-    def __init__(self, log_path):
+    """Logger class"""
+
+    def __init__(self, log_path: os.path):
+        """constructor
+
+        Args:
+            log_path (os.path): log path
+        """
         self.log_path = log_path
         self.writer = None
         self.tracker = defaultdict(int)
@@ -15,7 +23,12 @@ class Logger:
         self.history = defaultdict(list)
         self.iterator = defaultdict(int)
 
-    def safe(self, write):
+    def safe(self, write: bool):
+        """if write is true creates a SummaryWriter object, else closes the SummaryWriter object
+
+        Args:
+            write (bool): creates a SUmmaryWriter object if True, else closes the SummaryWriter object
+        """
         if write:
             self.writer = SummaryWriter(self.log_path)
         else:
@@ -27,6 +40,7 @@ class Logger:
         return
 
     def reset(self):
+        """resets the tracker, counter, and mean attributes of the Logger object"""
         self.tracker = defaultdict(int)
         self.counter = defaultdict(int)
         self.mean = defaultdict(int)

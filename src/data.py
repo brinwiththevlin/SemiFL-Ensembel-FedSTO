@@ -1,5 +1,7 @@
+"""Data module"""
+
 import copy
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Any
 import torch
 import numpy as np
 import models
@@ -88,7 +90,16 @@ def fetch_dataset(data_name: str) -> Dict[str, Dataset]:
     return dataset
 
 
-def separate_dataset(dataset, idx):
+def separate_dataset(dataset: Dataset, idx: List[int]) -> Dataset:
+    """selects data points at idx from dataset
+
+    Args:
+        dataset (Dataset): dataset
+        idx (List[int]): indexs to select
+
+    Returns:
+        Dataset: selected dataset
+    """
     separated_dataset = copy.deepcopy(dataset)
     separated_dataset.data = [dataset.data[s] for s in idx]
     separated_dataset.target = [dataset.target[s] for s in idx]
@@ -141,13 +152,21 @@ def separate_dataset_su(
 
 
 def make_dataset_normal(dataset: Dataset) -> Tuple[Dataset, transforms.Compose]:
+    """normalizes a dataset
+
+    Args:
+        dataset (Dataset): dataset
+
+    Returns:
+        Tuple[Dataset, transforms.Compose]: normalized dataset, transform
+    """
     _transform = dataset.transform
     transform = datasets.Compose([transforms.ToTensor(), transforms.Normalize(*data_stats[cfg["data_name"]])])
     dataset.transform = transform
     return dataset, _transform
 
 
-def input_collate(batch):
+def input_collate(batch: Any):
     if isinstance(batch[0], dict):
         output = {key: [] for key in batch[0].keys()}
         for b in batch:
@@ -158,47 +177,48 @@ def input_collate(batch):
         return default_collate(batch)
 
 
-def make_data_loader(
-    dataset: Dict[str, Dataset], tag: str, batch_size=None, shuffle=None, sampler=None, batch_sampler=None
-) -> Dict[str, DataLoader]:
+def make_data_loader(dataset: Dict[str, Dataset], tag: str, shuffle: Dict[str, bool] = None) -> Dict[str, DataLoader]:
+    """creates a dictionary of DataLoader objects
+
+    Args:
+        dataset (Dict[str, Dataset]): dictionary of dataset. keys: "train", "test"
+        tag (str): tag for configuration
+        shuffle (Dict[str, bol], optional): set values to true if you want to shuffle datasets. Defaults to None.
+
+    Returns:
+        Dict[str, DataLoader]: dictionary of dataloaders
+
+    """
     data_loader = {}
     for k in dataset:
-        _batch_size = cfg[tag]["batch_size"][k] if batch_size is None else batch_size[k]
+        _batch_size = cfg[tag]["batch_size"][k]
         _shuffle = cfg[tag]["shuffle"][k] if shuffle is None else shuffle[k]
-        if sampler is not None:
-            data_loader[k] = DataLoader(
-                dataset=dataset[k],
-                batch_size=_batch_size,
-                sampler=sampler[k],
-                pin_memory=True,
-                num_workers=cfg["num_workers"],
-                collate_fn=input_collate,
-                worker_init_fn=np.random.seed(cfg["seed"]),
-            )
-        elif batch_sampler is not None:
-            data_loader[k] = DataLoader(
-                dataset=dataset[k],
-                batch_sampler=batch_sampler[k],
-                pin_memory=True,
-                num_workers=cfg["num_workers"],
-                collate_fn=input_collate,
-                worker_init_fn=np.random.seed(cfg["seed"]),
-            )
-        else:
-            data_loader[k] = DataLoader(
-                dataset=dataset[k],
-                batch_size=_batch_size,
-                shuffle=_shuffle,
-                pin_memory=True,
-                num_workers=cfg["num_workers"],
-                collate_fn=input_collate,
-                worker_init_fn=np.random.seed(cfg["seed"]),
-            )
+        data_loader[k] = DataLoader(
+            dataset=dataset[k],
+            batch_size=_batch_size,
+            shuffle=_shuffle,
+            pin_memory=True,
+            num_workers=cfg["num_workers"],
+            collate_fn=input_collate,
+            worker_init_fn=np.random.seed(cfg["seed"]),
+        )
 
     return data_loader
 
 
-def split_dataset(dataset, num_users, data_split_mode):
+def split_dataset(dataset: Dataset, num_users: int, data_split_mode: str) -> Dict[int, List[int]]:
+    """
+    Split the dataset into train and test sets based on the specified data split mode.
+
+    Args:
+        dataset (Dataset): The dataset to be split.
+        num_users (int): The number of users to split the dataset among.
+        data_split_mode (str): The mode for splitting the data. Must be either "iid" or "non-iid".
+
+    Returns:
+        Dict[int, List[int]]: A dictionary containing the split dataset, with keys "train" and "test".
+            The values are lists of indices representing the data samples for each user.
+    """
     assert cfg["data_split_mode"] == "iid" or "non-iid" in cfg["data_split_mode"], "Not valid data split mode"
     data_split = {}
     if data_split_mode == "iid":
@@ -288,7 +308,15 @@ def non_iid(dataset: Dataset, num_users: int) -> Dict[int, List[int]]:
 
 
 class FixTransform(object):
-    def __init__(self, data_name):
+    """fix transform object"""
+
+    def __init__(self, data_name: str):
+        """constructor
+
+        Args:
+            data_name (str): data name
+
+        """
         assert data_name in datasets.__all__, "Not valid dataset name"
         if data_name in ["CIFAR10", "CIFAR100"]:
             self.weak = transforms.Compose(
@@ -342,11 +370,42 @@ class FixTransform(object):
                     transforms.Normalize(*data_stats[data_name]),
                 ]
             )
-        else:
-            raise ValueError("Not valid dataset")
 
-    def __call__(self, input):
+    def __call__(self, input: Dataset):
+        """applys weak and strong augmentations
+
+        Args:
+            input (Dataset): data to be augmented
+
+        Returns:
+            Dataset: augmented data
+        """
         data = self.weak(input["data"])
         aug = self.strong(input["data"])
         input = {**input, "data": data, "aug": aug}
         return input
+
+
+class MixDataset(Dataset):
+    """Mix Dataset class"""
+
+    def __init__(self, size, dataset):
+        self.size = size
+        self.dataset = dataset
+
+    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+        """given an index returns a data point
+
+        Args:
+            index (int): index
+
+        Returns:
+            Dict[str, torch.Tensor]: data point
+        """
+        index = torch.randint(0, len(self.dataset), (1,)).item()
+        input = self.dataset[index]
+        input = {"data": input["data"], "target": input["target"]}
+        return input
+
+    def __len__(self):
+        return self.size

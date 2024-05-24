@@ -2,7 +2,7 @@ import torch
 from config import cfg
 import torch.optim as optim
 import numpy as np
-from typing import Dict, List, Union, Generator, Any
+from typing import Dict, List, Union, Generator, Any, Callable
 from torch.utils.data import Dataset
 
 
@@ -84,7 +84,7 @@ def process_dataset(dataset: Dict[str, Dataset]) -> None:
 
 
 def recur(
-    fn: function, input: Union[torch.Tensor, np.ndarray, list, tuple, dict, str, None], *args: Any
+    fn: Callable, input: Union[torch.Tensor, np.ndarray, list, tuple, dict, str, None], *args: Any
 ) -> Union[torch.Tensor, np.ndarray, list, tuple, dict, str, None]:
     """recusive function to apply fn to input
 
@@ -133,6 +133,7 @@ def recur(
 
 
 def process_control():
+    """process control parameters"""
     assert "num_clients" in cfg["control"], "Not valid control"
 
     cfg["num_supervised"] = int(cfg["control"]["num_supervised"])

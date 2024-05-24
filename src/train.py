@@ -93,7 +93,11 @@ def runExperiment():
     # Training
     Warmup(server_dataset["train"], server, optimizer, metric, logger, cfg["T0"])
     for epoch in range(last_epoch, cfg["global"]["num_epochs"]):
-        train_client(client_dataset["train"], server, client, optimizer, metric, logger, epoch)
+        train_client(client_dataset["train"], server, client, optimizer, metric, logger, epoch, selective=True)
+
+        logger.reset()
+        server.update(client)
+        train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
     # for epoch in range(last_epoch, cfg["global"]["num_epochs"] + 1):
     #     train_client(batchnorm_dataset, client_dataset["train"], server, client, optimizer, metric, logger, epoch)
 
@@ -170,13 +174,44 @@ def train_client(
     metric: Metric,
     logger: Logger,
     epoch: int,
+    selective: bool = False,
 ):
+    # TODO: might need to change logger info
     logger.safe(True)
     num_active_clients = int(np.ceil(cfg["active_rate"] * cfg["num_clients"]))
+    start_time = time.time()
     client_id: list = torch.randperm(cfg["num_clients"])[:num_active_clients].tolist()
     for i in range(num_active_clients):
         client[client_id[i]].active = True
     server.distribute(client)
+    num_activae_clients = len(client_id)
+    lr = optimizer.param_groups[0]["lr"]
+    for i, m in enumerate(client_id):
+        dataset_m = separate_dataset(client_dataset, client[m].data_split["train"])
+        client[m].active = True
+        client[m].train(dataset_m, lr, metric, logger, selective)
+
+        if i % int((num_activae_clients * cfg["active_rate"]) + 1) == 0:
+            _time = (time.time() - start_time) / (i + 1)
+            epoch_finished_time = datetime.timedelta(seconds=_time * (num_active_clients - i - 1))
+            exp_finished_time = epoch_finished_time + datetime.timedelta(
+                seconds=round((cfg["global"]["num_epochs"] - epoch) * _time * num_active_clients)
+            )
+            exp_progress = 100.0 * i / num_active_clients
+            info = {
+                "info": [
+                    "Model: {}".format(cfg["model_tag"]),
+                    "Train Epoch (C): {}({:.0f}%)".format(epoch, exp_progress),
+                    "Learning rate: {:.6f}".format(lr),
+                    "ID: {}({}/{})".format(client_id[i], i + 1, num_active_clients),
+                    "Epoch Finished Time: {}".format(epoch_finished_time),
+                    "Experiment Finished Time: {}".format(exp_finished_time),
+                ]
+            }
+            logger.append(info, "train", mean=False)
+            print(logger.write("train", metric.metric_name["train"]))
+    logger.safe(False)
+    return
 
 
 def Warmup(
