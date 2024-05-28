@@ -9,9 +9,8 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from collections import Counter
-from utils import makedir_exist_ok
 
-IMG_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif']
+IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif"]
 
 
 def find_classes(dir):
@@ -22,13 +21,14 @@ def find_classes(dir):
 
 
 def pil_loader(path):
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         img = Image.open(f)
-        return img.convert('RGB')
+        return img.convert("RGB")
 
 
 def accimage_loader(path):
     import accimage
+
     try:
         return accimage.Image(path)
     except IOError:
@@ -37,7 +37,8 @@ def accimage_loader(path):
 
 def default_loader(path):
     from torchvision import get_image_backend
-    if get_image_backend() == 'accimage':
+
+    if get_image_backend() == "accimage":
         return accimage_loader(path)
     else:
         return pil_loader(path)
@@ -68,8 +69,8 @@ def make_bar_updater(pbar):
 
 def calculate_md5(path, chunk_size=1024 * 1024):
     md5 = hashlib.md5()
-    with open(path, 'rb') as f:
-        for chunk in iter(lambda: f.read(chunk_size), b''):
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(chunk_size), b""):
             md5.update(chunk)
     return md5.hexdigest()
 
@@ -88,43 +89,43 @@ def check_integrity(path, md5=None):
 
 def download_url(url, root, filename, md5):
     from six.moves import urllib
+
     opener = urllib.request.build_opener()
-    opener.addheaders = [('User-agent', 'pytorch/vision')]
+    opener.addheaders = [("User-agent", "pytorch/vision")]
     urllib.request.install_opener(opener)
     path = os.path.join(root, filename)
-    makedir_exist_ok(root)
+    os.makedirs(root, exist_ok=True)
     if os.path.isfile(path) and check_integrity(path, md5):
-        print('Using downloaded and verified file: ' + path)
+        print("Using downloaded and verified file: " + path)
     else:
         try:
-            print('Downloading ' + url + ' to ' + path)
-            urllib.request.urlretrieve(url, path, reporthook=make_bar_updater(tqdm(unit='B', unit_scale=True)))
+            print("Downloading " + url + " to " + path)
+            urllib.request.urlretrieve(url, path, reporthook=make_bar_updater(tqdm(unit="B", unit_scale=True)))
         except OSError:
-            if url[:5] == 'https':
-                url = url.replace('https:', 'http:')
-                print('Failed download. Trying https -> http instead.'
-                      ' Downloading ' + url + ' to ' + path)
-                urllib.request.urlretrieve(url, path, reporthook=make_bar_updater(tqdm(unit='B', unit_scale=True)))
+            if url[:5] == "https":
+                url = url.replace("https:", "http:")
+                print("Failed download. Trying https -> http instead." " Downloading " + url + " to " + path)
+                urllib.request.urlretrieve(url, path, reporthook=make_bar_updater(tqdm(unit="B", unit_scale=True)))
         if not check_integrity(path, md5):
-            raise RuntimeError('Not valid downloaded file')
+            raise RuntimeError("Not valid downloaded file")
     return
 
 
 def extract_file(src, dest=None, delete=False):
-    print('Extracting {}'.format(src))
+    print("Extracting {}".format(src))
     dest = os.path.dirname(src) if dest is None else dest
     filename = os.path.basename(src)
-    if filename.endswith('.zip'):
+    if filename.endswith(".zip"):
         with zipfile.ZipFile(src, "r") as zip_f:
             zip_f.extractall(dest)
-    elif filename.endswith('.tar'):
+    elif filename.endswith(".tar"):
         with tarfile.open(src) as tar_f:
             tar_f.extractall(dest)
-    elif filename.endswith('.tar.gz') or filename.endswith('.tgz'):
-        with tarfile.open(src, 'r:gz') as tar_f:
+    elif filename.endswith(".tar.gz") or filename.endswith(".tgz"):
+        with tarfile.open(src, "r:gz") as tar_f:
             tar_f.extractall(dest)
-    elif filename.endswith('.gz'):
-        with open(src.replace('.gz', ''), 'wb') as out_f, gzip.GzipFile(src) as zip_f:
+    elif filename.endswith(".gz"):
+        with open(src.replace(".gz", ""), "wb") as out_f, gzip.GzipFile(src) as zip_f:
             out_f.write(zip_f.read())
     if delete:
         os.remove(src)
@@ -133,7 +134,7 @@ def extract_file(src, dest=None, delete=False):
 
 def make_data(root, extensions):
     path = []
-    files = glob.glob('{}/**/*'.format(root), recursive=True)
+    files = glob.glob("{}/**/*".format(root), recursive=True)
     for file in files:
         if has_file_allowed_extension(file, extensions):
             path.append(os.path.normpath(file))
@@ -198,13 +199,13 @@ class Compose(object):
 
     def __call__(self, input):
         for t in self.transforms:
-            input['data'] = t(input['data'])
+            input["data"] = t(input["data"])
         return input
 
     def __repr__(self):
-        format_string = self.__class__.__name__ + '('
+        format_string = self.__class__.__name__ + "("
         for t in self.transforms:
-            format_string += '\n'
-            format_string += '    {0}'.format(t)
-        format_string += '\n)'
+            format_string += "\n"
+            format_string += "    {0}".format(t)
+        format_string += "\n)"
         return format_string

@@ -47,8 +47,17 @@ class Client:
         mask = max_p.ge(cfg["threshold"])
         return hard_pseudo_label, mask
 
-    def train(self, dataset: Dataset, lr: float, metric: Metric, logger: Logger, selective: bool = False):
-        model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
+    def train(
+        self,
+        dataset: Dataset,
+        lr: float,
+        metric: Metric,
+        logger: Logger,
+        selective: bool = False,
+        orthogonal: bool = False,
+    ):
+        model: nn.Module = getattr(models, cfg["model_name"])()
+        model = model.to(cfg["device"])
         model.load_state_dict(self.model_state_dict, strict=False)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
         optimizer = make_optimizer(model.parameters(), "local")
@@ -139,7 +148,8 @@ class Server:
 
     def train(self, dataset, lr, metric, logger):
         data_loader = make_data_loader({"train": dataset}, "server")["train"]
-        model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
+        model: nn.ModuleDict = getattr(models, cfg["model_name"])()
+        model = model.to(cfg["device"])
         model.load_state_dict(self.model_state_dict)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
         optimizer = make_optimizer(model.parameters(), "local")

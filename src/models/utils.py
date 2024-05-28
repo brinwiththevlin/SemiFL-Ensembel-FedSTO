@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import models
-from typing import Union
 
 
 def init_param(m):

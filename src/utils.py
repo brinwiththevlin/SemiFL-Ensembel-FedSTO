@@ -207,3 +207,14 @@ def save(input, path, mode="torch"):
     else:
         raise ValueError("Not valid save mode")
     return
+
+
+def load(path, mode="torch"):
+    if mode == "torch":
+        return torch.load(path, map_location=lambda storage, loc: storage)
+    elif mode == "np":
+        return np.load(path, allow_pickle=True)
+    elif mode == "pickle":
+        return pickle.load(open(path, "rb"))
+    else:
+        raise ValueError("Not valid save mode")
