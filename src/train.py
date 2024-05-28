@@ -26,7 +26,7 @@ import torch.nn as nn
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description="cfg")
 for k in cfg:
-    exec("parser.add_argument('--{0}', default=cfg['{0}'], type=type(cfg['{0}']))".format(k))
+    parser.add_argument(f"--{k}", default=cfg[k], type=type(cfg[k]))
 parser.add_argument("--control_name", default=None, type=str)
 args = vars(parser.parse_args())
 process_args(args)
@@ -57,7 +57,8 @@ def runExperiment():
     )
     data_loader = make_data_loader(server_dataset, "global")
 
-    model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
+    model: nn.Module = getattr(models, cfg["model_name"])()
+    model = model.to(cfg["device"])
     optimizer = make_optimizer(model.parameters(), "local")
     scheduler = make_scheduler(optimizer, "global")
 

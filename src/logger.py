@@ -1,3 +1,5 @@
+"""inspired by: https://github.com/diaoenmao/SemiFL-Semi-Supervised-Federated-Learning-for-Unlabeled-Clients-with-Alternate-Training"""
+
 from collections import defaultdict
 from collections.abc import Iterable
 from torch.utils.tensorboard import SummaryWriter

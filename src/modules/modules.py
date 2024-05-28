@@ -112,104 +112,27 @@ class Server:
         return
 
     def update(self, client):
-        if "fmatch" not in cfg["loss_mode"]:
-            with torch.no_grad():
-                valid_client = [client[i] for i in range(len(client)) if client[i].active]
-                if len(valid_client) > 0:
-                    model: nn.Module = getattr(models, cfg["model_name"])()
-                    model = model.to(cfg["device"])
-                    model.load_state_dict(self.model_state_dict)
-                    global_optimizer = make_optimizer(model.parameters(), "global")
-                    global_optimizer.load_state_dict(self.global_optimizer_state_dict)
-                    global_optimizer.zero_grad()
-                    weight = torch.ones(len(valid_client))
-                    weight = weight / weight.sum()
-                    for k, v in model.named_parameters():
-                        parameter_type = k.split(".")[-1]
-                        if "weight" in parameter_type or "bias" in parameter_type:
-                            tmp_v = v.data.new_zeros(v.size())
-                            for m in range(len(valid_client)):
-                                tmp_v += weight[m] * valid_client[m].model_state_dict[k]
-                            v.grad = (v.data - tmp_v).detach()
-                    global_optimizer.step()
-                    self.global_optimizer_state_dict = save_optimizer_state_dict(global_optimizer.state_dict())
-                    self.model_state_dict = save_model_state_dict(model.state_dict())
-        elif "fmatch" in cfg["loss_mode"]:
-            with torch.no_grad():
-                valid_client = [client[i] for i in range(len(client)) if client[i].active]
-                if len(valid_client) > 0:
-                    model: nn.Module = getattr(models, cfg["model_name"])()
-                    model = model.to(cfg["device"])
-                    model.load_state_dict(self.model_state_dict)
-                    global_optimizer = make_optimizer(model.make_phi_parameters(), "global")
-                    global_optimizer.load_state_dict(self.global_optimizer_state_dict)
-                    global_optimizer.zero_grad()
-                    weight = torch.ones(len(valid_client))
-                    weight = weight / weight.sum()
-                    for k, v in model.named_parameters():
-                        parameter_type = k.split(".")[-1]
-                        if "weight" in parameter_type or "bias" in parameter_type:
-                            tmp_v = v.data.new_zeros(v.size())
-                            for m in range(len(valid_client)):
-                                tmp_v += weight[m] * valid_client[m].model_state_dict[k]
-                            v.grad = (v.data - tmp_v).detach()
-                    global_optimizer.step()
-                    self.global_optimizer_state_dict = save_optimizer_state_dict(global_optimizer.state_dict())
-                    self.model_state_dict = save_model_state_dict(model.state_dict())
-        for i in range(len(client)):
-            client[i].active = False
-        return
-
-    def update_parallel(self, client):
-        if "frgd" not in cfg["loss_mode"]:
-            with torch.no_grad():
-                valid_client_server = [self] + [client[i] for i in range(len(client)) if client[i].active]
-                model = eval("models.{}()".format(cfg["model_name"]))
+        with torch.no_grad():
+            valid_client = [client[i] for i in range(len(client)) if client[i].active]
+            if len(valid_client) > 0:
+                model: nn.Module = getattr(models, cfg["model_name"])()
+                model = model.to(cfg["device"])
                 model.load_state_dict(self.model_state_dict)
                 global_optimizer = make_optimizer(model.parameters(), "global")
                 global_optimizer.load_state_dict(self.global_optimizer_state_dict)
                 global_optimizer.zero_grad()
-                weight = torch.ones(len(valid_client_server))
-                weight = weight / (2 * (weight.sum() - 1))
-                weight[0] = 1 / 2 if len(valid_client_server) > 1 else 1
+                weight = torch.ones(len(valid_client))
+                weight = weight / weight.sum()
                 for k, v in model.named_parameters():
                     parameter_type = k.split(".")[-1]
                     if "weight" in parameter_type or "bias" in parameter_type:
                         tmp_v = v.data.new_zeros(v.size())
-                        for m in range(len(valid_client_server)):
-                            tmp_v += weight[m] * valid_client_server[m].model_state_dict[k]
+                        for m in range(len(valid_client)):
+                            tmp_v += weight[m] * valid_client[m].model_state_dict[k]
                         v.grad = (v.data - tmp_v).detach()
                 global_optimizer.step()
                 self.global_optimizer_state_dict = save_optimizer_state_dict(global_optimizer.state_dict())
                 self.model_state_dict = save_model_state_dict(model.state_dict())
-        elif "frgd" in cfg["loss_mode"]:
-            with torch.no_grad():
-                valid_client_server = [self] + [client[i] for i in range(len(client)) if client[i].active]
-                num_valid_client = len(valid_client_server) - 1
-                if len(valid_client_server) > 0:
-                    model: nn.Module = getattr(models, cfg["model_name"])()
-                    model = model.to(cfg["device"])
-                    model.load_state_dict(self.model_state_dict)
-                    global_optimizer = make_optimizer(model.parameters(), "global")
-                    global_optimizer.load_state_dict(self.global_optimizer_state_dict)
-                    global_optimizer.zero_grad()
-                    weight = torch.ones(len(valid_client_server)) / (num_valid_client // 2 + 1)
-                    for k, v in model.named_parameters():
-                        parameter_type = k.split(".")[-1]
-                        if "weight" in parameter_type or "bias" in parameter_type:
-                            tmp_v_1 = v.data.new_zeros(v.size())
-                            tmp_v_1 += weight[0] * valid_client_server[0].model_state_dict[k]
-                            for m in range(1, num_valid_client // 2 + 1):
-                                tmp_v_1 += weight[m] * valid_client_server[m].model_state_dict[k]
-                            tmp_v_2 = v.data.new_zeros(v.size())
-                            tmp_v_2 += weight[0] * valid_client_server[0].model_state_dict[k]
-                            for m in range(num_valid_client // 2 + 1, len(valid_client_server)):
-                                tmp_v_2 += weight[m] * valid_client_server[m].model_state_dict[k]
-                            tmp_v = (tmp_v_1 + tmp_v_2) / 2
-                            v.grad = (v.data - tmp_v).detach()
-                    global_optimizer.step()
-                    self.global_optimizer_state_dict = save_optimizer_state_dict(global_optimizer.state_dict())
-                    self.model_state_dict = save_model_state_dict(model.state_dict())
         for i in range(len(client)):
             client[i].active = False
         return

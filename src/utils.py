@@ -1,4 +1,6 @@
 import torch
+import pickle
+import os
 from config import cfg
 import torch.optim as optim
 import numpy as np
@@ -151,9 +153,9 @@ def process_control():
     # cfg["wresnet28x2"] = {"depth": 28, "widen_factor": 2, "drop_rate": 0.0}
     # cfg["wresnet28x8"] = {"depth": 28, "widen_factor": 8, "drop_rate": 0.0}
     cfg["unsup_ratio"] = 1
-    if "loss_mode" in cfg["control"]:
-        cfg["loss_mode"] = cfg["control"]["loss_mode"]
-        cfg["threshold"] = float(cfg["control"]["loss_mode"].split("-")[0].split("@")[1])
+    # if "loss_mode" in cfg["control"]:
+    #     cfg["loss_mode"] = cfg["control"]["loss_mode"]
+    #     cfg["threshold"] = float(cfg["control"]["loss_mode"].split("-")[0].split("@")[1])
 
     cfg["num_clients"] = int(cfg["control"]["num_clients"])
     cfg["active_rate"] = float(cfg["control"]["active_rate"])
@@ -190,4 +192,18 @@ def process_control():
     cfg["global"]["nesterov"] = False
     cfg["global"]["scheduler_name"] = "CosineAnnealingLR"
     cfg["alpha"] = 0.75
+    return
+
+
+def save(input, path, mode="torch"):
+    dirname = os.path.dirname(path)
+    os.makedirs(dirname, exist_ok=True)
+    if mode == "torch":
+        torch.save(input, path)
+    elif mode == "np":
+        np.save(path, input, allow_pickle=True)
+    elif mode == "pickle":
+        pickle.dump(input, open(path, "wb"))
+    else:
+        raise ValueError("Not valid save mode")
     return
