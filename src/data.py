@@ -4,7 +4,6 @@ import copy
 from typing import Dict, Tuple, List, Any
 import torch
 import numpy as np
-import models
 from config import cfg
 from torchvision import transforms
 from torch.utils.data import DataLoader, Dataset
@@ -32,17 +31,13 @@ def fetch_dataset(data_name: str) -> Dict[str, Dataset]:
         Dict[str, Dataset]: dictoinary of dataset. keys: "train", "test"
     """
     assert data_name in datasets.__all__, "Not valid dataset name"
-    dataset = {}
-    print("fetching data {}...".format(data_name))
-    root = "./data/{}".format(data_name)
+    dataset: Dict[str, Dataset] = {}
+    print(f"fetching data {data_name}...")
+    root = f"./data/{data_name}"
 
-    dataset["train"] = eval(
-        "datasets.{}(root=root, split='train', "
-        "transform=datasets.Compose([transforms.ToTensor()]))".format(data_name)
-    )
-    dataset["test"] = eval(
-        "datasets.{}(root=root, split='test', " "transform=datasets.Compose([transforms.ToTensor()]))".format(data_name)
-    )
+    dataset_class = getattr(datasets, data_name)
+    dataset["train"] = dataset_class(root=root, split="train", transform=transforms.ToTensor())
+    dataset["test"] = dataset_class(root=root, split="test", transform=transforms.ToTensor())
 
     if data_name in ["MNIST", "FashionMNIST"]:
         dataset["train"].transform = datasets.Compose(
@@ -146,8 +141,6 @@ def separate_dataset_su(
     unsupervised_idx = list(set(idx) - set(supervised_idx))
     _server_dataset: Dataset = separate_dataset(server_dataset, supervised_idx)  # sampled dataset for server
     _client_dataset: Dataset = separate_dataset(client_dataset, unsupervised_idx)  # the rest for client
-    transform = FixTransform(cfg["data_name"])
-    _client_dataset.transform = transform
     return _server_dataset, _client_dataset, supervised_idx
 
 
@@ -305,107 +298,3 @@ def non_iid(dataset: Dataset, num_users: int) -> Dict[int, List[int]]:
             min_size = min([len(data_split_idx) for data_split_idx in data_split])
         data_split = {i: data_split[i] for i in range(num_users)}
     return data_split
-
-
-class FixTransform(object):
-    """fix transform object"""
-
-    def __init__(self, data_name: str):
-        """constructor
-
-        Args:
-            data_name (str): data name
-
-        """
-        assert data_name in datasets.__all__, "Not valid dataset name"
-        if data_name in ["CIFAR10", "CIFAR100"]:
-            self.weak = transforms.Compose(
-                [
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-            self.strong = transforms.Compose(
-                [
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
-                    datasets.RandAugment(n=2, m=10),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-        elif data_name in ["SVHN"]:
-            self.weak = transforms.Compose(
-                [
-                    transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-            self.strong = transforms.Compose(
-                [
-                    transforms.RandomCrop(32, padding=4, padding_mode="reflect"),
-                    datasets.RandAugment(n=2, m=10),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-        elif data_name in ["STL10"]:
-            self.weak = transforms.Compose(
-                [
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomCrop(96, padding=12, padding_mode="reflect"),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-            self.strong = transforms.Compose(
-                [
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomCrop(96, padding=12, padding_mode="reflect"),
-                    datasets.RandAugment(n=2, m=10),
-                    transforms.ToTensor(),
-                    transforms.Normalize(*data_stats[data_name]),
-                ]
-            )
-
-    def __call__(self, input: Dataset):
-        """applys weak and strong augmentations
-
-        Args:
-            input (Dataset): data to be augmented
-
-        Returns:
-            Dataset: augmented data
-        """
-        data = self.weak(input["data"])
-        aug = self.strong(input["data"])
-        input = {**input, "data": data, "aug": aug}
-        return input
-
-
-class MixDataset(Dataset):
-    """Mix Dataset class"""
-
-    def __init__(self, size, dataset):
-        self.size = size
-        self.dataset = dataset
-
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        """given an index returns a data point
-
-        Args:
-            index (int): index
-
-        Returns:
-            Dict[str, torch.Tensor]: data point
-        """
-        index = torch.randint(0, len(self.dataset), (1,)).item()
-        input = self.dataset[index]
-        input = {"data": input["data"], "target": input["target"]}
-        return input
-
-    def __len__(self):
-        return self.size

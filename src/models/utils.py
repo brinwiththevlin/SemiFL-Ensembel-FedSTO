@@ -1,3 +1,5 @@
+"""inspired by: https://github.com/diaoenmao/SemiFL-Semi-Supervised-Federated-Learning-for-Unlabeled-Clients-with-Alternate-Training"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

@@ -1,22 +1,30 @@
+"""inspired by: https://github.com/diaoenmao/SemiFL-Semi-Supervised-Federated-Learning-for-Unlabeled-Clients-with-Alternate-Training"""
+
 import copy
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import models
-from itertools import compress
 from config import cfg
-from data import make_data_loader, MixDataset
+from data import make_data_loader
 from utils import make_optimizer, collate, to_device
 from metrics import Metric
 from torch.utils.data import Dataset
 from logger import Logger
-from typing import OrderedDict, List
+from typing import OrderedDict, List, Tuple
 
 
 class Client:
+    """Client class"""
+
     def __init__(self, client_id: int, model: nn.Module, data_split: dict[str, Dataset]):
-        assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid client loss mode"
+        """Client class
+
+        Args:
+            client_id (int): client id
+            model (nn.Module): model to train
+            data_split (dict[str, Dataset]): data split
+        """
         self.client_id = client_id
         self.data_split = data_split  # {"train": dataset, "test": dataset}
         self.model_state_dict = save_model_state_dict(model.state_dict())
@@ -26,62 +34,20 @@ class Client:
         self.beta = torch.distributions.beta.Beta(torch.tensor([cfg["alpha"]]), torch.tensor([cfg["alpha"]]))
         self.verbose = cfg["verbose"]
 
-    def make_hard_pseudo_label(self, soft_pseudo_label: torch.Tensor):
+    def make_hard_pseudo_label(self, soft_pseudo_label: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """given a soft label, return a hard label
+
+        Args:
+            soft_pseudo_label (torch.Tensor): soft pseudo label
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: hard pseudo label, mask
+        """
         max_p, hard_pseudo_label = torch.max(soft_pseudo_label, dim=-1)
         mask = max_p.ge(cfg["threshold"])
         return hard_pseudo_label, mask
 
-    def make_dataset(self, dataset, metric, logger):
-        assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid client loss mode"
-        with torch.no_grad():
-            data_loader = make_data_loader({"train": dataset}, "global", shuffle={"train": False})["train"]
-            model: nn.Module = eval('models.{}(track=True).to(cfg["device"])'.format(cfg["model_name"]))
-            model.load_state_dict(self.model_state_dict)
-            model.train(False)
-            output = []
-            target = []
-            for i, input in enumerate(data_loader):
-                input = collate(input)
-                input = to_device(input, cfg["device"])
-                output_ = model(input)
-                output_i = output_["target"]
-                target_i = input["target"]
-                output.append(output_i.cpu())
-                target.append(target_i.cpu())
-            output_, input_ = {}, {}
-            output_["target"] = torch.cat(output, dim=0)
-            input_["target"] = torch.cat(target, dim=0)
-            output_["target"] = F.softmax(output_["target"], dim=-1)
-            new_target, mask = self.make_hard_pseudo_label(output_["target"])
-            output_["mask"] = mask
-            evaluation = metric.evaluate(["PAccuracy", "MAccuracy", "LabelRatio"], input_, output_)
-            logger.append(evaluation, "train", n=len(input_["target"]))
-            if torch.any(mask):
-                fix_dataset = copy.deepcopy(dataset)
-                fix_dataset.target = new_target.tolist()
-                mask = mask.tolist()
-                fix_dataset.data = list(compress(fix_dataset.data, mask))
-                fix_dataset.target = list(compress(fix_dataset.target, mask))
-                fix_dataset.other = {"id": list(range(len(fix_dataset.data)))}
-                if "mix" in cfg["loss_mode"]:
-                    mix_dataset = copy.deepcopy(dataset)
-                    mix_dataset.target = new_target.tolist()
-                    mix_dataset = MixDataset(len(fix_dataset), mix_dataset)
-                else:
-                    mix_dataset = None
-                return fix_dataset, mix_dataset
-            else:
-                return None
-
     def train(self, dataset: Dataset, lr: float, metric: Metric, logger: Logger, selective: bool = False):
-        assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid client loss mode"
-        assert not any(
-            match in cfg["loss_mode"] for match in ["batch", "frgd", "fmatch", "sup"]
-        ), "Not valid client loss mode"
-
-        fix_dataset, mix_dataset = dataset
-        fix_data_loader = make_data_loader({"train": fix_dataset}, "client")["train"]
-        mix_data_loader = make_data_loader({"train": mix_dataset}, "client")["train"]
         model: nn.Module = eval('models.{}().to(cfg["device"])'.format(cfg["model_name"]))
         model.load_state_dict(self.model_state_dict, strict=False)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
@@ -91,44 +57,43 @@ class Client:
             # efficient teacher with head and neck freezing (torch.no_grad())
             raise NotImplementedError
         else:
-            model.train(True)
-        if cfg["client"]["num_epochs"] == 1:
-            num_batches = int(np.ceil(len(fix_data_loader) * float(cfg["local_epoch"][0])))
-        else:
-            num_batches = None
-        for epoch in range(1, cfg["client"]["num_epochs"] + 1):
-            for i, (fix_input, mix_input) in enumerate(zip(fix_data_loader, mix_data_loader)):
-                input = {
-                    "data": fix_input["data"],
-                    "target": fix_input["target"],
-                    "aug": fix_input["aug"],
-                    "mix_data": mix_input["data"],
-                    "mix_target": mix_input["target"],
-                }
-                input = collate(input)
-                input_size = input["data"].size(0)
-                input["lam"] = self.beta.sample()[0]
-                input["mix_data"] = (input["lam"] * input["data"] + (1 - input["lam"]) * input["mix_data"]).detach()
-                input["mix_target"] = torch.stack([input["target"], input["mix_target"]], dim=-1)
-                input["loss_mode"] = cfg["loss_mode"]
-                input = to_device(input, cfg["device"])
-                optimizer.zero_grad()
-                output = model(input)
-                output["loss"].backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-                optimizer.step()
-                evaluation = metric.evaluate(["Loss", "Accuracy"], input, output)
-                logger.append(evaluation, "train", n=input_size)
-                if num_batches is not None and i == num_batches - 1:
-                    break
-        self.optimizer_state_dict = save_optimizer_state_dict(optimizer.state_dict())
-        self.model_state_dict = save_model_state_dict(model.state_dict())
-        return
+            raise NotImplementedError
+        # if cfg["client"]["num_epochs"] == 1:
+        #     num_batches = int(np.ceil(len(fix_data_loader) * float(cfg["local_epoch"][0])))
+        # else:
+        #     num_batches = None
+        # for epoch in range(1, cfg["client"]["num_epochs"] + 1):
+        #     for i, (fix_input, mix_input) in enumerate(zip(fix_data_loader, mix_data_loader)):
+        #         input = {
+        #             "data": fix_input["data"],
+        #             "target": fix_input["target"],
+        #             "aug": fix_input["aug"],
+        #             "mix_data": mix_input["data"],
+        #             "mix_target": mix_input["target"],
+        #         }
+        #         input = collate(input)
+        #         input_size = input["data"].size(0)
+        #         input["lam"] = self.beta.sample()[0]
+        #         input["mix_data"] = (input["lam"] * input["data"] + (1 - input["lam"]) * input["mix_data"]).detach()
+        #         input["mix_target"] = torch.stack([input["target"], input["mix_target"]], dim=-1)
+        #         input["loss_mode"] = cfg["loss_mode"]
+        #         input = to_device(input, cfg["device"])
+        #         optimizer.zero_grad()
+        #         output = model(input)
+        #         output["loss"].backward()
+        #         torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+        #         optimizer.step()
+        #         evaluation = metric.evaluate(["Loss", "Accuracy"], input, output)
+        #         logger.append(evaluation, "train", n=input_size)
+        #         if num_batches is not None and i == num_batches - 1:
+        #             break
+        # self.optimizer_state_dict = save_optimizer_state_dict(optimizer.state_dict())
+        # self.model_state_dict = save_model_state_dict(model.state_dict())
+        # return
 
 
 class Server:
     def __init__(self, model: nn.Module):
-        assert all(match in cfg["loss_mode"] for match in ["fix", "mix"]), "Not valid server loss mode"
         self.model_state_dict = save_model_state_dict(model.state_dict())
         optimizer = make_optimizer(model.parameters(), "local")
         global_optimizer = make_optimizer(model.parameters(), "global")
@@ -151,7 +116,8 @@ class Server:
             with torch.no_grad():
                 valid_client = [client[i] for i in range(len(client)) if client[i].active]
                 if len(valid_client) > 0:
-                    model = eval("models.{}()".format(cfg["model_name"]))
+                    model: nn.Module = getattr(models, cfg["model_name"])()
+                    model = model.to(cfg["device"])
                     model.load_state_dict(self.model_state_dict)
                     global_optimizer = make_optimizer(model.parameters(), "global")
                     global_optimizer.load_state_dict(self.global_optimizer_state_dict)
@@ -172,7 +138,8 @@ class Server:
             with torch.no_grad():
                 valid_client = [client[i] for i in range(len(client)) if client[i].active]
                 if len(valid_client) > 0:
-                    model = eval("models.{}()".format(cfg["model_name"]))
+                    model: nn.Module = getattr(models, cfg["model_name"])()
+                    model = model.to(cfg["device"])
                     model.load_state_dict(self.model_state_dict)
                     global_optimizer = make_optimizer(model.make_phi_parameters(), "global")
                     global_optimizer.load_state_dict(self.global_optimizer_state_dict)
@@ -220,7 +187,8 @@ class Server:
                 valid_client_server = [self] + [client[i] for i in range(len(client)) if client[i].active]
                 num_valid_client = len(valid_client_server) - 1
                 if len(valid_client_server) > 0:
-                    model = eval("models.{}()".format(cfg["model_name"]))
+                    model: nn.Module = getattr(models, cfg["model_name"])()
+                    model = model.to(cfg["device"])
                     model.load_state_dict(self.model_state_dict)
                     global_optimizer = make_optimizer(model.parameters(), "global")
                     global_optimizer.load_state_dict(self.global_optimizer_state_dict)
