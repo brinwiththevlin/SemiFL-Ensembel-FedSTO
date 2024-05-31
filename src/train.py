@@ -1,28 +1,26 @@
 import argparse
-import torch.optim as optim
 import datetime
-import models
 import os
 import shutil
 import time
+from typing import Dict, List
+
+import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-from torch.utils.data import DataLoader, Dataset
-import numpy as np
-from config import cfg, process_args
-from data import (
-    fetch_dataset,
-    split_dataset,
-    make_data_loader,
-    separate_dataset,
-    separate_dataset_su,
-)
-from metrics import Metric
-from modules import Server, Client
-from utils import save, to_device, process_control, process_dataset, make_optimizer, make_scheduler, collate
-from logger import make_logger, Logger
-from typing import Dict, List
 import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+
+import models
+from config import cfg, process_args
+from data import (fetch_dataset, make_data_loader, separate_dataset,
+                  separate_dataset_su, split_dataset)
+from logger import Logger, make_logger
+from metrics import Metric
+from modules import Client, Server
+from utils import (collate, make_optimizer, make_scheduler, process_control,
+                   process_dataset, save, to_device)
 
 cudnn.benchmark = True
 parser = argparse.ArgumentParser(description="cfg")
@@ -37,7 +35,12 @@ def main():
     process_control()
     seeds = list(range(cfg["init_seed"], cfg["init_seed"] + cfg["num_experiments"]))
     for i in range(cfg["num_experiments"]):
-        model_tag_list = [str(seeds[i]), cfg["data_name"], cfg["model_name"], cfg["control_name"]]
+        model_tag_list = [
+            str(seeds[i]),
+            cfg["data_name"],
+            cfg["model_name"],
+            cfg["control_name"],
+        ]
         cfg["model_tag"] = "_".join([x for x in model_tag_list if x])
         print("Experiment: {}".format(cfg["model_tag"]))
         runExperiment()
@@ -53,8 +56,8 @@ def runExperiment():
     client_dataset = fetch_dataset(cfg["data_name"])
     process_dataset(server_dataset)
 
-    server_dataset["train"], client_dataset["train"], supervised_idx = separate_dataset_su(
-        server_dataset["train"], client_dataset["train"]
+    server_dataset["train"], client_dataset["train"], supervised_idx = (
+        separate_dataset_su(server_dataset["train"], client_dataset["train"])
     )
     data_loader = make_data_loader(server_dataset, "global")
 
@@ -63,11 +66,16 @@ def runExperiment():
     optimizer = make_optimizer(model.parameters(), "local")
     scheduler = make_scheduler(optimizer, "global")
 
-    data_split = split_dataset(client_dataset, cfg["num_clients"], cfg["data_split_mode"])
+    data_split = split_dataset(
+        client_dataset, cfg["num_clients"], cfg["data_split_mode"]
+    )
 
     # TODO: change this based on final loss mode
     metric = Metric(
-        {"train": ["Loss", "Accuracy", "PAccuracy", "MAccuracy", "LabelRatio"], "test": ["Loss", "Accuracy"]}
+        {
+            "train": ["Loss", "Accuracy", "PAccuracy", "MAccuracy", "LabelRatio"],
+            "test": ["Loss", "Accuracy"],
+        }
     )
 
     # if cfg["resume_mode"] == 1:
@@ -90,13 +98,23 @@ def runExperiment():
     last_epoch = 0
     server: Server = make_server(model)
     client: list[Client] = make_client(model, data_split)
-    logger = make_logger(os.path.join("output", "runs", "train_{}".format(cfg["model_tag"])))
+    logger = make_logger(
+        os.path.join("output", "runs", "train_{}".format(cfg["model_tag"]))
+    )
 
     # Training
     Warmup(server_dataset["train"], server, optimizer, metric, logger, cfg["T0"])
     for epoch in range(last_epoch, cfg["T1"]):
         train_client(
-            client_dataset["train"], server, client, optimizer, metric, logger, epoch, selective=True, orthogonal=False
+            client_dataset["train"],
+            server,
+            client,
+            optimizer,
+            metric,
+            logger,
+            epoch,
+            selective=True,
+            orthogonal=False,
         )
 
         logger.reset()
@@ -104,12 +122,30 @@ def runExperiment():
         train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
 
         record_result(
-            model, server, client, optimizer, scheduler, supervised_idx, data_loader, data_split, logger, metric, epoch
+            model,
+            server,
+            client,
+            optimizer,
+            scheduler,
+            supervised_idx,
+            data_loader,
+            data_split,
+            logger,
+            metric,
+            epoch,
         )
 
     for epoch in range(last_epoch, cfg["T2"]):
         train_client(
-            client_dataset["train"], server, client, optimizer, metric, logger, epoch, selective=False, orthogonal=True
+            client_dataset["train"],
+            server,
+            client,
+            optimizer,
+            metric,
+            logger,
+            epoch,
+            selective=False,
+            orthogonal=True,
         )
 
         logger.reset()
@@ -117,7 +153,17 @@ def runExperiment():
         train_server(server_dataset["train"], server, optimizer, metric, logger, epoch)
 
         record_result(
-            model, server, client, optimizer, scheduler, supervised_idx, data_loader, data_split, logger, metric, epoch
+            model,
+            server,
+            client,
+            optimizer,
+            scheduler,
+            supervised_idx,
+            data_loader,
+            data_split,
+            logger,
+            metric,
+            epoch,
         )
     return
 
@@ -135,7 +181,9 @@ def make_server(model: nn.Module) -> Server:
     return server
 
 
-def make_client(model: nn.Module, data_split: Dict[str, Dict[int, List[int]]]) -> List[Client]:
+def make_client(
+    model: nn.Module, data_split: Dict[str, Dict[int, List[int]]]
+) -> List[Client]:
     """creates a list of client objects
 
     Args:
@@ -148,7 +196,11 @@ def make_client(model: nn.Module, data_split: Dict[str, Dict[int, List[int]]]) -
     client_id = torch.arange(cfg["num_clients"])
     client = [None for _ in range(cfg["num_clients"])]
     for m in range(len(client)):
-        client[m] = Client(client_id[m], model, {"train": data_split["train"][m], "test": data_split["test"][m]})
+        client[m] = Client(
+            client_id[m],
+            model,
+            {"train": data_split["train"][m], "test": data_split["test"][m]},
+        )
     return client
 
 
@@ -180,9 +232,13 @@ def train_client(
 
         if i % int((num_activae_clients * cfg["active_rate"]) + 1) == 0:
             _time = (time.time() - start_time) / (i + 1)
-            epoch_finished_time = datetime.timedelta(seconds=_time * (num_active_clients - i - 1))
+            epoch_finished_time = datetime.timedelta(
+                seconds=_time * (num_active_clients - i - 1)
+            )
             exp_finished_time = epoch_finished_time + datetime.timedelta(
-                seconds=round((cfg["global"]["num_epochs"] - epoch) * _time * num_active_clients)
+                seconds=round(
+                    (cfg["global"]["num_epochs"] - epoch) * _time * num_active_clients
+                )
             )
             exp_progress = 100.0 * i / num_active_clients
             info = {
@@ -228,14 +284,21 @@ def Warmup(
 
 
 def train_server(
-    dataset: Dataset, server: Server, optimizer: optim.Optimizer, metric: Metric, logger: Logger, epoch: int
+    dataset: Dataset,
+    server: Server,
+    optimizer: optim.Optimizer,
+    metric: Metric,
+    logger: Logger,
+    epoch: int,
 ):
     logger.safe(True)
     start_time = time.time()
     lr = optimizer.param_groups[0]["lr"]
     server.train(dataset, lr, metric, logger)
     _time = time.time() - start_time
-    epoch_finished_time = datetime.timedelta(seconds=round((cfg["global"]["num_epochs"] - epoch) * _time))
+    epoch_finished_time = datetime.timedelta(
+        seconds=round((cfg["global"]["num_epochs"] - epoch) * _time)
+    )
     info = {
         "info": [
             "Model: {}".format(cfg["model_tag"]),
@@ -250,7 +313,13 @@ def train_server(
     return
 
 
-def test(data_loader: DataLoader, model: nn.Module, metric: Metric, logger: Logger, epoch: int):
+def test(
+    data_loader: DataLoader,
+    model: nn.Module,
+    metric: Metric,
+    logger: Logger,
+    epoch: int,
+):
     logger.safe(True)
     with torch.no_grad():
         model.train(False)
@@ -259,10 +328,17 @@ def test(data_loader: DataLoader, model: nn.Module, metric: Metric, logger: Logg
             input_size = input["data"].size(0)
             input = to_device(input, cfg["device"])
             output = model(input)
-            output["loss"] = output["loss"].mean() if cfg["world_size"] > 1 else output["loss"]
+            output["loss"] = (
+                output["loss"].mean() if cfg["world_size"] > 1 else output["loss"]
+            )
             evaluation = metric.evaluate(metric.metric_name["test"], input, output)
             logger.append(evaluation, "test", input_size)
-        info = {"info": ["Model: {}".format(cfg["model_tag"]), "Test Epoch: {}({:.0f}%)".format(epoch, 100.0)]}
+        info = {
+            "info": [
+                "Model: {}".format(cfg["model_tag"]),
+                "Test Epoch: {}({:.0f}%)".format(epoch, 100.0),
+            ]
+        }
         logger.append(info, "test", mean=False)
         print(logger.write("test", metric.metric_name["test"]))
     logger.safe(False)

@@ -1,11 +1,13 @@
-import torch
-import pickle
 import os
-from config import cfg
-import torch.optim as optim
+import pickle
+from typing import Any, Callable, Dict, Generator, List, Union
+
 import numpy as np
-from typing import Dict, List, Union, Generator, Any, Callable
+import torch
+import torch.optim as optim
 from torch.utils.data import Dataset
+
+from config import cfg
 
 
 def to_device(input: Any, device: torch.device) -> Any:

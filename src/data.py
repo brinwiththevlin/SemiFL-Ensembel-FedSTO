@@ -1,15 +1,17 @@
 """Data module"""
 
 import copy
-from typing import Dict, Tuple, List, Any
-import torch
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
-from config import cfg
-from torchvision import transforms
+import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.dataloader import default_collate
-from utils import collate, to_device
+from torchvision import transforms
+
 import datasets
+from config import cfg
+from utils import collate, to_device
 
 data_stats = {
     "MNIST": ((0.1307,), (0.3081,)),

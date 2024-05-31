@@ -1,9 +1,9 @@
 import numpy as np
-import torch
 import PIL
-import PIL.ImageOps
-import PIL.ImageEnhance
 import PIL.ImageDraw
+import PIL.ImageEnhance
+import PIL.ImageOps
+import torch
 from PIL import Image
 
 PARAMETER_MAX = 10

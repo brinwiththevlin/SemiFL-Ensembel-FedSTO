@@ -1,17 +1,25 @@
-import anytree
-import numpy as np
 import os
 import pickle
+
+import anytree
+import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from utils import save, load
-from .utils import download_url, extract_file, make_classes_counts, make_tree, make_flat_index
+
+from utils import load, save
+
+from .utils import download_url, extract_file, make_classes_counts, make_flat_index, make_tree
 
 
 class CIFAR10(Dataset):
     data_name = "CIFAR10"
-    file = [("https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz", "c58f30108f718f92721af3b95e74349a")]
+    file = [
+        (
+            "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz",
+            "c58f30108f718f92721af3b95e74349a",
+        )
+    ]
 
     def __init__(self, root, split, transform=None):
         self.root = os.path.expanduser(root)
@@ -20,7 +28,8 @@ class CIFAR10(Dataset):
         if not os.path.exists(self.processed_folder):
             self.process()
         id, self.data, self.target = load(
-            os.path.join(self.processed_folder, "{}.pt".format(self.split)), mode="pickle"
+            os.path.join(self.processed_folder, "{}.pt".format(self.split)),
+            mode="pickle",
         )
         self.classes_counts = make_classes_counts(self.target)
         self.classes_to_labels, self.target_size = load(os.path.join(self.processed_folder, "meta.pt"), mode="pickle")
@@ -64,12 +73,22 @@ class CIFAR10(Dataset):
 
     def __repr__(self):
         fmt_str = "Dataset {}\nSize: {}\nRoot: {}\nSplit: {}\nTransforms: {}".format(
-            self.__class__.__name__, self.__len__(), self.root, self.split, self.transform.__repr__()
+            self.__class__.__name__,
+            self.__len__(),
+            self.root,
+            self.split,
+            self.transform.__repr__(),
         )
         return fmt_str
 
     def make_data(self):
-        train_filenames = ["data_batch_1", "data_batch_2", "data_batch_3", "data_batch_4", "data_batch_5"]
+        train_filenames = [
+            "data_batch_1",
+            "data_batch_2",
+            "data_batch_3",
+            "data_batch_4",
+            "data_batch_5",
+        ]
         test_filenames = ["test_batch"]
         train_data, train_target = read_pickle_file(
             os.path.join(self.raw_folder, "cifar-10-batches-py"), train_filenames
@@ -83,12 +102,21 @@ class CIFAR10(Dataset):
         for c in classes:
             make_tree(classes_to_labels, [c])
         target_size = make_flat_index(classes_to_labels)
-        return (train_id, train_data, train_target), (test_id, test_data, test_target), (classes_to_labels, target_size)
+        return (
+            (train_id, train_data, train_target),
+            (test_id, test_data, test_target),
+            (classes_to_labels, target_size),
+        )
 
 
 class CIFAR100(CIFAR10):
     data_name = "CIFAR100"
-    file = [("https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz", "eb9058c3a382ffc7106e4002c42a8d85")]
+    file = [
+        (
+            "https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz",
+            "eb9058c3a382ffc7106e4002c42a8d85",
+        )
+    ]
 
     def make_data(self):
         train_filenames = ["train"]
@@ -107,7 +135,11 @@ class CIFAR100(CIFAR10):
                     break
             make_tree(classes_to_labels, c)
         target_size = make_flat_index(classes_to_labels, classes)
-        return (train_id, train_data, train_target), (test_id, test_data, test_target), (classes_to_labels, target_size)
+        return (
+            (train_id, train_data, train_target),
+            (test_id, test_data, test_target),
+            (classes_to_labels, target_size),
+        )
 
 
 def read_pickle_file(path, filenames):
@@ -117,7 +149,7 @@ def read_pickle_file(path, filenames):
         with open(file_path, "rb") as f:
             entry = pickle.load(f, encoding="latin1")
             img.append(entry["data"])
-            label.extend(entry["labels"]) if "labels" in entry else label.extend(entry["fine_labels"])
+            (label.extend(entry["labels"]) if "labels" in entry else label.extend(entry["fine_labels"]))
     img = np.vstack(img).reshape(-1, 3, 32, 32)
     img = img.transpose((0, 2, 3, 1))
     return img, label
@@ -129,13 +161,31 @@ CIFAR100_classes = {
     "flowers": ["orchid", "poppy", "rose", "sunflower", "tulip"],
     "food containers": ["bottle", "bowl", "can", "cup", "plate"],
     "fruit and vegetables": ["apple", "mushroom", "orange", "pear", "sweet_pepper"],
-    "household electrical devices": ["clock", "keyboard", "lamp", "telephone", "television"],
+    "household electrical devices": [
+        "clock",
+        "keyboard",
+        "lamp",
+        "telephone",
+        "television",
+    ],
     "household furniture": ["bed", "chair", "couch", "table", "wardrobe"],
     "insects": ["bee", "beetle", "butterfly", "caterpillar", "cockroach"],
     "large carnivores": ["bear", "leopard", "lion", "tiger", "wolf"],
-    "large man-made outdoor things": ["bridge", "castle", "house", "road", "skyscraper"],
+    "large man-made outdoor things": [
+        "bridge",
+        "castle",
+        "house",
+        "road",
+        "skyscraper",
+    ],
     "large natural outdoor scenes": ["cloud", "forest", "mountain", "plain", "sea"],
-    "large omnivores and herbivores": ["camel", "cattle", "chimpanzee", "elephant", "kangaroo"],
+    "large omnivores and herbivores": [
+        "camel",
+        "cattle",
+        "chimpanzee",
+        "elephant",
+        "kangaroo",
+    ],
     "medium-sized mammals": ["fox", "porcupine", "possum", "raccoon", "skunk"],
     "non-insect invertebrates": ["crab", "lobster", "snail", "spider", "worm"],
     "people": ["baby", "boy", "girl", "man", "woman"],

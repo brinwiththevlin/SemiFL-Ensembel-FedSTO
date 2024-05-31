@@ -1,14 +1,15 @@
-import anytree
-import hashlib
-import os
 import glob
 import gzip
+import hashlib
+import os
 import tarfile
 import zipfile
+from collections import Counter
+
+import anytree
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-from collections import Counter
 
 IMG_EXTENSIONS = [".jpg", ".jpeg", ".png", ".ppm", ".bmp", ".pgm", ".tif"]
 
@@ -24,24 +25,6 @@ def pil_loader(path):
     with open(path, "rb") as f:
         img = Image.open(f)
         return img.convert("RGB")
-
-
-def accimage_loader(path):
-    import accimage
-
-    try:
-        return accimage.Image(path)
-    except IOError:
-        return pil_loader(path)
-
-
-def default_loader(path):
-    from torchvision import get_image_backend
-
-    if get_image_backend() == "accimage":
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
 
 
 def has_file_allowed_extension(filename, extensions):
@@ -88,7 +71,7 @@ def check_integrity(path, md5=None):
 
 
 def download_url(url, root, filename, md5):
-    from six.moves import urllib
+    import urllib3 as urllib
 
     opener = urllib.request.build_opener()
     opener.addheaders = [("User-agent", "pytorch/vision")]
@@ -105,7 +88,11 @@ def download_url(url, root, filename, md5):
             if url[:5] == "https":
                 url = url.replace("https:", "http:")
                 print("Failed download. Trying https -> http instead." " Downloading " + url + " to " + path)
-                urllib.request.urlretrieve(url, path, reporthook=make_bar_updater(tqdm(unit="B", unit_scale=True)))
+                urllib.request.urlretrieve(
+                    url,
+                    path,
+                    reporthook=make_bar_updater(tqdm(unit="B", unit_scale=True)),
+                )
         if not check_integrity(path, md5):
             raise RuntimeError("Not valid downloaded file")
     return

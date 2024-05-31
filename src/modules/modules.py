@@ -1,17 +1,19 @@
 """inspired by: https://github.com/diaoenmao/SemiFL-Semi-Supervised-Federated-Learning-for-Unlabeled-Clients-with-Alternate-Training"""
 
 import copy
+from typing import List, OrderedDict, Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import Dataset
+
 import models
 from config import cfg
 from data import make_data_loader
-from utils import make_optimizer, collate, to_device
-from metrics import Metric
-from torch.utils.data import Dataset
 from logger import Logger
-from typing import OrderedDict, List, Tuple
+from metrics import Metric
+from utils import collate, make_optimizer, to_device
 
 
 class Client:
@@ -56,17 +58,16 @@ class Client:
         selective: bool = False,
         orthogonal: bool = False,
     ):
+        assert selective + orthogonal == 1, "selective and orthogonal are mutually exclusive"
         model: nn.Module = getattr(models, cfg["model_name"])()
         model = model.to(cfg["device"])
         model.load_state_dict(self.model_state_dict, strict=False)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
         optimizer = make_optimizer(model.parameters(), "local")
         optimizer.load_state_dict(self.optimizer_state_dict)
-        if selective:
-            # efficient teacher with head and neck freezing (torch.no_grad())
-            raise NotImplementedError
-        else:
-            raise NotImplementedError
+
+        self.efficient_teacher(model, dataset, optimizer, metric, logger, selective, orthogonal)
+
         # if cfg["client"]["num_epochs"] == 1:
         #     num_batches = int(np.ceil(len(fix_data_loader) * float(cfg["local_epoch"][0])))
         # else:
@@ -99,6 +100,9 @@ class Client:
         # self.optimizer_state_dict = save_optimizer_state_dict(optimizer.state_dict())
         # self.model_state_dict = save_model_state_dict(model.state_dict())
         # return
+
+    def efficient_teacher(self, model, dataset, optimizer, metric, logger, selective, orthogonal):
+        model.train(True)
 
 
 class Server:
@@ -148,7 +152,7 @@ class Server:
 
     def train(self, dataset, lr, metric, logger):
         data_loader = make_data_loader({"train": dataset}, "server")["train"]
-        model: nn.ModuleDict = getattr(models, cfg["model_name"])()
+        model: nn.Module = getattr(models, cfg["model_name"])()
         model = model.to(cfg["device"])
         model.load_state_dict(self.model_state_dict)
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
