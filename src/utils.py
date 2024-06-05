@@ -1,6 +1,7 @@
 import os
 import pickle
 from typing import Any, Callable, Dict, Generator, List, Union
+from collections.abc import Iterable
 
 import numpy as np
 import torch
@@ -9,7 +10,11 @@ from torch.utils.data import Dataset
 
 from config import cfg
 
-
+def ntuple(n):
+    def parse(x):
+        if isinstance(x, Iterable) and not isinstance(x, str):
+            return x
+        
 def to_device(input: Any, device: torch.device) -> Any:
     """recursive function to move input to device
 
@@ -142,11 +147,10 @@ def process_control():
 
     cfg["num_supervised"] = int(cfg["control"]["num_supervised"])
     data_shape = {
-        # "MNIST": [1, 28, 28],
-        # "FashionMNIST": [1, 28, 28],
-        # "CIFAR10": [3, 32, 32],
-        # "CIFAR100": [3, 32, 32],
-        # "SVHN": [3, 32, 32],
+        "CIFAR10": [3, 32, 32],
+        "RarePlanes": [3, 224, 224],
+        "VOC": [3, 224, 224],
+        "COCO": [3, 640, 480],
     }
     cfg["data_shape"] = data_shape[cfg["data_name"]]
     cfg["conv"] = {"hidden_size": [32, 64]}
@@ -163,6 +167,9 @@ def process_control():
     cfg["active_rate"] = float(cfg["control"]["active_rate"])
     cfg["data_split_mode"] = cfg["control"]["data_split_mode"]
     cfg["local_epoch"] = cfg["control"]["local_epoch"].split("-")
+    cfg["T0"] = cfg["control"]["T0"]
+    cfg["T1"] = cfg["control"]["T1"]
+    cfg["T2"] = cfg["control"]["T2"]
     cfg["gm"] = float(cfg["control"]["gm"])
     cfg["sbn"] = int(cfg["control"]["sbn"])
     cfg["ft"] = int(cfg["control"]["ft"])

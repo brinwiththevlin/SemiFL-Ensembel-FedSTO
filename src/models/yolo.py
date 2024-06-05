@@ -3,6 +3,10 @@ from ultralytics.utils.loss import v8DetectionLoss
 from ultralytics.nn.tasks import DetectionModel, SegmentationModel, PoseModel, OBBModel, ClassificationModel
 from ultralytics.models import yolo
 from ultralytics import YOLO
+import logging
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.FATAL)
 
 
 class SRIPLoss(v8DetectionLoss):
@@ -89,6 +93,31 @@ class orthoYolo(YOLO):
         }
 
 
+class SSODYolo(YOLO):
+    def __init__(self, model_state_dict=None, selective=False, orthogonal=False, **kwargs):
+        assert not (selective and orthogonal), "selective and orthogonal cannot be True at the same time"
+        super().__init__(**kwargs)
+        if orthogonal:
+            self.model = orthoYolo(pretrained=False, **kwargs)
+            self.freeze = False
+        elif selective:
+            self.model = YOLO(pretrained=False, **kwargs)
+            self.freeze = list(range(11, 25))
+        else: 
+            self.model = YOLO(pretrained=False, **kwargs)
+            self.freeze = False
+        
+        if model_state_dict:    
+            self.model.load_state_dict(model_state_dict)
+
+    def train(self, data, epochs, imgsz, verbose=False):
+        results = self.model.train(data, epochs, imgsz, verbose, freeze=self.freeze)
+        state =  self.model.state_dict() 
+        return state
+
+        
 if __name__ == "__main__":
     model = orthoYolo( model="yolov8n.pt")
-    results = model.train(data="coco8.yaml", epochs=100, imgsz=640, val=False, pretrained=False, verbose=True)
+    # results = model.train(data="coco8.yaml", epochs=100, imgsz=640, verbose=False)
+    for name, param in model.named_parameters():
+        print(name, param.shape)

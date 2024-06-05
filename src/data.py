@@ -117,28 +117,16 @@ def separate_dataset_su(
     Returns:
         Tuple[Dataset, Dataset, list]: server dataset, client dataset, supervised index
     """
-    if cfg["data_name"] in ["STL10"]:
-        if cfg["num_supervised"] == -1:
-            supervised_idx = torch.arange(5000).tolist()
-        else:
-            target = torch.tensor(server_dataset.target)[:5000]
-            num_supervised_per_class = cfg["num_supervised"] // cfg["target_size"]
-            supervised_idx = []
-            for i in range(cfg["target_size"]):
-                idx = torch.where(target == i)[0]
-                idx = idx[torch.randperm(len(idx))[:num_supervised_per_class]].tolist()
-                supervised_idx.extend(idx)
+    if cfg["num_supervised"] == -1:
+        supervised_idx = list(range(len(server_dataset)))
     else:
-        if cfg["num_supervised"] == -1:
-            supervised_idx = list(range(len(server_dataset)))
-        else:
-            target = torch.tensor(server_dataset.target)
-            num_supervised_per_class = cfg["num_supervised"] // cfg["target_size"]
-            supervised_idx = []
-            for i in range(cfg["target_size"]):
-                idx = torch.where(target == i)[0]
-                idx = idx[torch.randperm(len(idx))[:num_supervised_per_class]].tolist()
-                supervised_idx.extend(idx)
+        target = torch.tensor(server_dataset.target)
+        num_supervised_per_class = cfg["num_supervised"] // cfg["target_size"]
+        supervised_idx = []
+        for i in range(cfg["target_size"]):
+            idx = torch.where(target == i)[0]
+            idx = idx[torch.randperm(len(idx))[:num_supervised_per_class]].tolist()
+            supervised_idx.extend(idx)
     idx = list(range(len(server_dataset)))
     unsupervised_idx = list(set(idx) - set(supervised_idx))
     _server_dataset: Dataset = separate_dataset(server_dataset, supervised_idx)  # sampled dataset for server

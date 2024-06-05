@@ -71,7 +71,7 @@ def check_integrity(path, md5=None):
 
 
 def download_url(url, root, filename, md5):
-    import urllib3 as urllib
+    from six.moves import urllib
 
     opener = urllib.request.build_opener()
     opener.addheaders = [("User-agent", "pytorch/vision")]

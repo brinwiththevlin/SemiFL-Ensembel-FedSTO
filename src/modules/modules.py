@@ -150,7 +150,7 @@ class Server:
             client[i].active = False
         return
 
-    def train(self, dataset, lr, metric, logger):
+    def train(self, dataset, lr, metric, logger, epoch, ortohgonal):
         data_loader = make_data_loader({"train": dataset}, "server")["train"]
         model: nn.Module = getattr(models, cfg["model_name"])()
         model = model.to(cfg["device"])

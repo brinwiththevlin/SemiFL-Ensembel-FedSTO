@@ -290,11 +290,12 @@ def train_server(
     metric: Metric,
     logger: Logger,
     epoch: int,
+    orthogonal: bool = False,
 ):
     logger.safe(True)
     start_time = time.time()
     lr = optimizer.param_groups[0]["lr"]
-    server.train(dataset, lr, metric, logger)
+    server.train(dataset, lr, metric, logger, orthogonal,)
     _time = time.time() - start_time
     epoch_finished_time = datetime.timedelta(
         seconds=round((cfg["global"]["num_epochs"] - epoch) * _time)
