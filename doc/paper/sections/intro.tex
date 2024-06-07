@@ -1,2 +1,8 @@
 \section {Abstract}
 \section{Intro}
+When performing object detection in the real world, manually labeling images or videos is laborious and time-consuming. In most cases, this leads to most data needing to be labeled. Despite the inevitable cost of assigning labels to training data, we still need to train for the Object detection task of interest. Many works have explored object detection in a Semi-supervised setting, most of which use a variation of the teacher-student model  [1][3][4][9][11].
+
+Another issue that has become prominent in recent years is data size, particularly in object detection. One way to mitigate this problem is to distribute your data across multiple machines and perform federated learning [1][2][3][10]. There are a few ways to divide the data between the server and the clients. However, following [2], we will separate it so that the server has all labeled data locally and the unsupervised data is divided across all the clients.
+
+The algorithm we would like to introduce, Semi-Supervised Ensemble Object Detection with Selective Training followed by Orthogonal Enhancement (SSEFSTO), is a two-phase training process in which we pre-train the parts of the model responsible for feature extraction in the first phase and then full parameter training with orthogonal enhancement. SSEFSTO introduces the idea of ensemble learning on  YOLOv8 [8] and  Faster R-CNN [7] into the semi-supervised federated object detection landscape.
+
