@@ -276,9 +276,9 @@ def Warmup(
         rounds (int): number of warmup rounds
 
     """
-    Logger.safe(True)
+    logger.safe(write=True)
     for _ in range(rounds):
-        server.train(dataset, optimizer, metric, logger)
+        server.train(dataset, optimizer, metric, logger, orthogonal=False)
         logger.reset()
     return server
 

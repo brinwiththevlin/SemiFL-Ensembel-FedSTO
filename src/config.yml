@@ -6,9 +6,9 @@ control:
   active_rate: '0.1'
   data_split_mode: 'iid'
   local_epoch: '5-5'
-  T0: '50'
-  T1: '100'
-  T2: '150'
+  T0: 50
+  T1: 100
+  T2: 150
   gm: '0.5'
   sbn: '1'
   ft: '1'

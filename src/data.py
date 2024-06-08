@@ -2,6 +2,7 @@
 
 import copy
 from typing import Any, Dict, List, Tuple
+import random
 
 import numpy as np
 import torch
@@ -13,7 +14,9 @@ import datasets
 from config import cfg
 from utils import collate, to_device
 
+
 data_stats = {
+    "COCO": ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
     "MNIST": ((0.1307,), (0.3081,)),
     "FashionMNIST": ((0.2860,), (0.3530,)),
     "CIFAR10": ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -41,7 +44,7 @@ def fetch_dataset(data_name: str) -> Dict[str, Dataset]:
     dataset["train"] = dataset_class(root=root, split="train", transform=transforms.ToTensor())
     dataset["test"] = dataset_class(root=root, split="test", transform=transforms.ToTensor())
 
-    if data_name in ["MNIST", "FashionMNIST"]:
+    if data_name in ["MNIST", "FashionMNIST", "COCO"]:
         dataset["train"].transform = datasets.Compose(
             [transforms.ToTensor(), transforms.Normalize(*data_stats[data_name])]
         )
@@ -120,12 +123,12 @@ def separate_dataset_su(
     if cfg["num_supervised"] == -1:
         supervised_idx = list(range(len(server_dataset)))
     else:
-        target = torch.tensor(server_dataset.target)
+        _target = [set([ann['category_id'] for ann in anns]) for anns in server_dataset.target]
         num_supervised_per_class = cfg["num_supervised"] // cfg["target_size"]
         supervised_idx = []
         for i in range(cfg["target_size"]):
-            idx = torch.where(target == i)[0]
-            idx = idx[torch.randperm(len(idx))[:num_supervised_per_class]].tolist()
+            idx = [index for index, target in enumerate(_target) if i in target]
+            idx = random.sample(idx, min(num_supervised_per_class, len(idx)))
             supervised_idx.extend(idx)
     idx = list(range(len(server_dataset)))
     unsupervised_idx = list(set(idx) - set(supervised_idx))

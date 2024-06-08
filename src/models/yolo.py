@@ -98,20 +98,25 @@ class SSODYolo(YOLO):
         assert not (selective and orthogonal), "selective and orthogonal cannot be True at the same time"
         super().__init__(**kwargs)
         if orthogonal:
-            self.model = orthoYolo(pretrained=False, **kwargs)
+            self.model = orthoYolo(**kwargs)
             self.freeze = False
         elif selective:
-            self.model = YOLO(pretrained=False, **kwargs)
+            self.model = YOLO(**kwargs)
             self.freeze = list(range(11, 25))
         else: 
-            self.model = YOLO(pretrained=False, **kwargs)
+            self.model = YOLO(**kwargs)
             self.freeze = False
         
         if model_state_dict:    
             self.model.load_state_dict(model_state_dict)
+        
+        self.pretrained=False
 
-    def train(self, data, epochs, imgsz, verbose=False):
-        results = self.model.train(data, epochs, imgsz, verbose, freeze=self.freeze)
+    def train(self, data_loader, epochs, verbose=False, pretrained: bool | str = None):
+        if not pretrained:
+            pretrained = self.pretrained
+        for data in data_loader:
+            results = self.model.train(data, epochs, verbose, freeze=self.freeze, pretrained=pretrained)
         state =  self.model.state_dict() 
         return state
 

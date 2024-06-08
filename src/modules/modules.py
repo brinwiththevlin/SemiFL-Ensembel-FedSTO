@@ -150,7 +150,7 @@ class Server:
             client[i].active = False
         return
 
-    def train(self, dataset, lr, metric, logger, epoch, ortohgonal):
+    def train(self, dataset: Dataset, lr: float, metric: Metric, logger: Logger, orthogonal: bool = False):
         data_loader = make_data_loader({"train": dataset}, "server")["train"]
         model: nn.Module = getattr(models, cfg["model_name"])()
         model = model.to(cfg["device"])
@@ -158,7 +158,7 @@ class Server:
         self.optimizer_state_dict["param_groups"][0]["lr"] = lr
         optimizer = make_optimizer(model.parameters(), "local")
         optimizer.load_state_dict(self.optimizer_state_dict)
-        model.train(True)
+        model.train(data_loader, optimizer, metric, logger, orthogonal)
         if cfg["server"]["num_epochs"] == 1:
             num_batches = int(np.ceil(len(data_loader) * float(cfg["local_epoch"][1])))
         else:

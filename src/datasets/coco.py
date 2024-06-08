@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from pycocotools.coco import COCO
+from pycocotools.coco import COCO as pyCOCO
 import json
 from utils import load, save
 
@@ -27,6 +27,10 @@ class COCO(Dataset):
         (
             "http://images.cocodataset.org/zips/test2017.zip",
             None,
+        ),
+        (
+            "http://images.cocodataset.org/annotations/annotations_trainval2017.zip",
+            None,
         )
     ]
 
@@ -40,9 +44,10 @@ class COCO(Dataset):
             os.path.join(self.processed_folder, "{}.pt".format(self.split)),
             mode="pickle",
         )
-        self.classes_counts = make_classes_counts(self.target)
+        self.classes_counts = self.make_classes_counts(self.target)
         self.classes_to_labels, self.target_size = load(os.path.join(self.processed_folder, "meta.pt"), mode="pickle")
         self.other = {"id": id}
+        # self.target = [t + [-1] * (len(self.classes_counts) - len(t)) for t in self.target]
        
     def __getitem__(self, index):
         data, target = Image.fromarray(self.data[index]), torch.tensor(self.target[index])
@@ -90,9 +95,10 @@ class COCO(Dataset):
         )
         return fmt_str
     
-    def makedata(self):
-        train_coco = COCO(os.path.join(self.raw_folder, "annotations", "instances_train2017.json"), split = "train")
-        val_coco = COCO(os.path.join(self.raw_folder, "annotations", "instances_val2017.json"))
+    def make_data(self):
+        train_coco = pyCOCO(os.path.join(self.raw_folder, "annotations", "instances_train2017.json"))
+        val_coco = pyCOCO(os.path.join(self.raw_folder, "annotations", "instances_val2017.json"))
+
 
         train_img_ids = train_coco.getImgIds()
         val_img_ids = val_coco.getImgIds()
@@ -101,17 +107,21 @@ class COCO(Dataset):
         val_data = [val_coco.loadImgs(img_id)[0]['file_name'] for img_id in val_img_ids]
 
         train_target = [train_coco.getAnnIds(imgIds=[img_id]) for img_id in train_img_ids]
+        train_target = [train_coco.loadAnns(ann_ids) for ann_ids in train_target]
         val_target = [val_coco.getAnnIds(imgIds=[img_id]) for img_id in val_img_ids]
+        val_target = [val_coco.loadAnns(ann_ids) for ann_ids in val_target]
 
         train_id = np.arange(len(train_data)).astype(np.int64)
         val_id = np.arange(len(val_data)).astype(np.int64)
 
         with open(os.path.join(self.raw_folder, "annotations", "instances_train2017.json"), "r") as f:
             data = json.load(f)
-            classes = [category['name'] for category in data['categories']]
+            classes_to_labels = {category['name']: category['id'] for category in data['categories']}
+        
+        target_size = len(classes_to_labels)
 
-        classes_to_labels = {cls: idx for idx, cls in enumerate(classes)}
-        target_size = len(classes)
+        # train_target = [target + [-1]* (target_size - len(target)) for target in train_target]
+        # val_target = [target + [-1]* (target_size - len(target)) for target in val_target]
 
         return (
             (train_id, train_data, train_target),
@@ -121,8 +131,7 @@ class COCO(Dataset):
 
     def make_classes_counts(self, targets):
         counts = {}
-        for ann_ids in targets:
-            anns = self.coco.loadAnns(ann_ids)
+        for anns in targets:
             for ann in anns:
                 category_id = ann['category_id']
                 if category_id in counts:
